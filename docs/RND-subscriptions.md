@@ -704,6 +704,107 @@ WordPress user roles assigned on subscription status transitions:
 
 ---
 
+## Subscription Delivery Types
+
+PureCart subscriptions support six delivery types, set per-product via `_purecart_sub_delivery_type`. The delivery type drives what linked entity is provisioned on activation, which admin actions are available, and which type-specific settings sections apply.
+
+| Type | Value | What's Provisioned | Module Dependency |
+|---|---|---|---|
+| **Software / Plugin** | `software` | License key + domain activations | Licensing module |
+| **SaaS Platform** | `saas` | SaaS account + seat allocation | SaaS module |
+| **Membership** | `membership` | WordPress role + content restriction tier | None (built-in) |
+| **Digital Downloads** | `download` | Per-cycle download quota + drip schedule | Downloads module |
+| **Learning / Course** | `course` | LMS enrollment (LearnDash / LifterLMS / Tutor LMS) | None (LMS API) |
+| **Service / Retainer** | `service` | Deliverable tracking + optional invoice | None (built-in) |
+
+`software` and `saas` already have their linked entity IDs stored in the subscriptions table (`license_id`, `saas_account_id`). The remaining four types store their linked data in `wp_purecart_subscription_linked_entities`.
+
+---
+
+### Delivery Type: Membership
+
+Role assignment is handled by `RoleManager` (see Role Mapping section). Additional membership-specific features:
+
+| Feature | Description | Meta / Config |
+|---|---|---|
+| Membership tier | Named tier (e.g., Gold, Silver, Bronze) | `_purecart_sub_membership_tier` product meta |
+| Content restriction label | Human-readable access label shown in admin/My Account | Stored in linked entity |
+| Grace period on cancellation | Access maintained N days after cancellation before role removal | `purecart_sub_membership_grace_days` |
+| Tier change | Admin can change tier mid-subscription | Fires `purecart_membership_tier_changed`; updates linked entity |
+| Role re-sync on renewal | Validates assigned role still exists on each renewal | Runs in `purecart_subscription_renewed` hook |
+
+**Lifecycle hooks:**
+- `purecart_subscription_activated` → assign active role + store tier in linked entity
+- `purecart_subscription_cancelled` / `purecart_subscription_expired` → schedule grace period expiry via Action Scheduler
+- `purecart_membership_grace_expired` → remove role; fire `purecart_subscription_status_changed`
+- `purecart_membership_tier_changed` → update `membership_tier` + `content_access_label` in linked entity; re-apply role if tier has different role mapping
+
+---
+
+### Delivery Type: Digital Downloads
+
+Download quota resets each billing cycle. Drip content is scheduled via Action Scheduler.
+
+| Feature | Description | Meta / Config |
+|---|---|---|
+| Download quota per cycle | N downloads allowed per billing period; 0 = unlimited | `_purecart_sub_download_limit` product meta |
+| Downloads this cycle counter | Running count reset to 0 on each successful renewal | `downloads_this_cycle` in linked entity |
+| Quota reset on renewal | Counter resets on `purecart_subscription_renewed` | Enforced by Downloads module via filter |
+| Drip content | Scheduled file releases at configured intervals | `_purecart_sub_drip_interval` + `_purecart_sub_drip_unit` product meta |
+| Next drip date | ISO-8601 date stored in linked entity | Advances by drip interval after each delivery |
+| Access revocation | Download access revoked on cancellation/expiry | Hooks into `purecart_subscription_cancelled` |
+
+**Lifecycle hooks:**
+- `purecart_subscription_renewed` → reset `downloads_this_cycle` to 0 in linked entity; schedule next drip delivery via Action Scheduler group `'purecart'`
+- `purecart_subscription_cancelled` / `purecart_subscription_expired` → revoke download access at period end
+- `purecart_drip_content_delivered` → advance `next_drip_date` in linked entity; notify customer
+
+---
+
+### Delivery Type: Learning / Course (LMS)
+
+LMS enrollment managed via the configured LMS plugin's PHP API.
+
+| Feature | Description | Meta / Config |
+|---|---|---|
+| LMS plugin selector | LearnDash, LifterLMS, or Tutor LMS | `purecart_sub_lms_plugin` config option |
+| Course assignment | Product linked to one or more LMS course IDs | `_purecart_sub_lms_course_ids` product meta (JSON array of int IDs) |
+| Enrollment on activation | Enroll user in all linked courses; store enrollment ID | Hooked into `purecart_subscription_activated` |
+| Enrollment expiry extension | Extend enrollment end date on each renewal | Hooked into `purecart_subscription_renewed` |
+| Revocation on cancellation | Unenroll user from all linked courses at period end | Hooked into `purecart_subscription_cancelled` |
+| Access extension (admin) | Admin can extend `course_access_until` date manually | REST action endpoint |
+| LMS enrollment ID | Stored as `lms_enrollment_id` in linked entity | |
+| Course access until | ISO-8601 date stored as `course_access_until` in linked entity | |
+
+**Lifecycle hooks:**
+- `purecart_subscription_activated` → enroll user in each course ID; store `lms_enrollment_id` and `course_access_until` in linked entity
+- `purecart_subscription_renewed` → extend `course_access_until` by one billing period
+- `purecart_subscription_cancelled` → schedule revocation via Action Scheduler at `cancellation_date`
+- `purecart_subscription_expired` → immediate revocation
+- `purecart_course_access_revoked` → log event; fire status hook
+
+---
+
+### Delivery Type: Service / Retainer
+
+Monthly agency retainer, consulting plan, or support subscription. Tracks deliverables per cycle.
+
+| Feature | Description | Meta / Config |
+|---|---|---|
+| Deliverable notes template | What the vendor delivers each cycle | `_purecart_sub_deliverable_notes` product meta |
+| Deliverable due date | When the next deliverable is due; advances each renewal | `next_deliverable_due` in linked entity |
+| Mark deliverable complete | Admin action; logs event and notifies customer | REST action endpoint; fires `purecart_deliverable_completed` |
+| Invoice mode | None / WooCommerce order / PDF attachment | `purecart_sub_service_invoice_mode` config option |
+| Auto-invoice on renewal | Generates and sends invoice on each successful renewal | Hooked into `purecart_subscription_renewed` |
+| Deliverable notes per subscription | Free-text override notes for this specific subscription | `deliverable_notes` in linked entity |
+
+**Lifecycle hooks:**
+- `purecart_subscription_renewed` → advance `next_deliverable_due` by one billing period in linked entity; generate invoice if configured
+- `purecart_deliverable_completed` → log event in subscription logs; send customer notification email
+- `purecart_subscription_cancelled` → mark service as ending; no new deliverable due date
+
+---
+
 ## Database Schema
 
 ### `wp_purecart_subscriptions`
@@ -716,6 +817,14 @@ CREATE TABLE {prefix}purecart_subscriptions (
     order_id                BIGINT UNSIGNED NOT NULL,        -- initial order
     license_id              BIGINT UNSIGNED NULL,
     saas_account_id         BIGINT UNSIGNED NULL,
+    delivery_type           ENUM(
+                                'software',
+                                'saas',
+                                'membership',
+                                'download',
+                                'course',
+                                'service'
+                            ) DEFAULT 'software',
     status                  ENUM(
                                 'trialing',
                                 'active',
@@ -780,6 +889,43 @@ CREATE TABLE {prefix}purecart_subscriptions (
     KEY idx_trial_ends (trial_ends_at),
     KEY idx_pause_end (pause_end_date),
     KEY idx_churn (churn_risk_score)
+);
+```
+
+### `wp_purecart_subscription_linked_entities`
+
+Stores type-specific linked data for `membership`, `download`, `course`, and `service` delivery types. (`software` uses `license_id`; `saas` uses `saas_account_id` — both already on the subscriptions table.)
+
+```sql
+CREATE TABLE {prefix}purecart_subscription_linked_entities (
+    id                      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    subscription_id         BIGINT UNSIGNED NOT NULL,
+    delivery_type           ENUM('membership','download','course','service') NOT NULL,
+    -- Membership
+    membership_tier         VARCHAR(100) NULL,
+    assigned_role           VARCHAR(100) NULL,
+    content_access_label    VARCHAR(255) NULL,
+    grace_ends_at           DATETIME NULL,
+    -- Digital downloads
+    downloads_this_cycle    INT UNSIGNED DEFAULT 0,
+    download_limit          INT UNSIGNED NULL,              -- NULL = unlimited
+    next_drip_date          DATETIME NULL,
+    -- Course / LMS
+    lms_enrollment_id       VARCHAR(255) NULL,
+    enrolled_course_ids     TEXT NULL,                     -- JSON array of int IDs
+    course_access_until     DATETIME NULL,
+    -- Service / Retainer
+    deliverable_notes       TEXT NULL,
+    next_deliverable_due    DATETIME NULL,
+    last_deliverable_at     DATETIME NULL,
+    created_at              DATETIME NOT NULL,
+    updated_at              DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uniq_subscription (subscription_id),
+    KEY idx_delivery_type (delivery_type),
+    KEY idx_next_drip (next_drip_date),
+    KEY idx_course_access (course_access_until),
+    KEY idx_grace_ends (grace_ends_at)
 );
 ```
 
@@ -876,6 +1022,13 @@ CREATE TABLE {prefix}purecart_revenue_goals (
 | `_purecart_access_duration_value` | int | Duration value for custom_duration access |
 | `_purecart_access_duration_unit` | string | Duration unit for custom_duration access |
 | `_purecart_sub_downgrade_products` | array | Product IDs available as downgrade options |
+| `_purecart_sub_delivery_type` | string | `software`, `saas`, `membership`, `download`, `course`, `service` |
+| `_purecart_sub_membership_tier` | string | Default membership tier name (e.g., Gold) |
+| `_purecart_sub_download_limit` | int | Downloads allowed per billing cycle (0 = unlimited) |
+| `_purecart_sub_drip_interval` | int | Drip content delivery interval number |
+| `_purecart_sub_drip_unit` | string | Drip interval unit: `day`, `week`, `month` |
+| `_purecart_sub_lms_course_ids` | JSON | Array of LMS course IDs to enroll on activation |
+| `_purecart_sub_deliverable_notes` | string | Template text describing the service deliverable |
 
 ---
 
@@ -907,6 +1060,9 @@ CREATE TABLE {prefix}purecart_revenue_goals (
 | `purecart_sub_avg_lifetime_months` | `24` | Months used for LTV projection |
 | `purecart_sub_gateway_meta_keys` | `[...]` | Gateway meta keys copied to renewal orders |
 | `purecart_sub_staging_domains` | `[]` | Domain patterns where renewals are blocked |
+| `purecart_sub_membership_grace_days` | `3` | Days of continued access after membership cancellation before role removal |
+| `purecart_sub_lms_plugin` | `'learndash'` | LMS integration: `learndash`, `lifterlms`, `tutor` |
+| `purecart_sub_service_invoice_mode` | `'none'` | Service invoice on renewal: `none`, `wc_order`, `pdf` |
 
 ---
 
@@ -929,8 +1085,21 @@ CREATE TABLE {prefix}purecart_revenue_goals (
 | `GET` | `/purecart/v1/subscriptions/{id}/cancellation/offers` | Customer | Available retention offers |
 | `POST` | `/purecart/v1/subscriptions/{id}/cancellation/accept-offer` | Customer | Accept retention offer |
 | `POST` | `/purecart/v1/subscriptions/{id}/external-renewal` | Server / Webhook | Record external gateway renewal |
-| `GET` | `/purecart/v1/subscriptions/revenue-goals` | manage_woocommerce | Revenue goals |
+| `POST` | `/purecart/v1/subscriptions/{id}/retry-payment` | manage_woocommerce | Manually trigger a payment retry |
+| `POST` | `/purecart/v1/subscriptions/{id}/send-card-update` | manage_woocommerce | Send card update request email to customer |
+| `POST` | `/purecart/v1/subscriptions/{id}/request-reauth` | manage_woocommerce | Trigger SCA reauthorization email |
+| `GET` | `/purecart/v1/subscriptions/revenue-goals` | manage_woocommerce | List all revenue goals |
 | `POST` | `/purecart/v1/subscriptions/revenue-goals` | manage_woocommerce | Create revenue goal |
+| `DELETE` | `/purecart/v1/subscriptions/revenue-goals/{goal_id}` | manage_woocommerce | Delete a revenue goal |
+| `POST` | `/purecart/v1/subscriptions/{id}/membership/change-tier` | manage_woocommerce | Change membership tier |
+| `POST` | `/purecart/v1/subscriptions/{id}/membership/set-grace-period` | manage_woocommerce | Set or extend membership grace period |
+| `POST` | `/purecart/v1/subscriptions/{id}/membership/sync-role` | manage_woocommerce | Force re-sync WordPress role to current tier |
+| `POST` | `/purecart/v1/subscriptions/{id}/downloads/reset-quota` | manage_woocommerce | Reset downloads-this-cycle counter to 0 |
+| `POST` | `/purecart/v1/subscriptions/{id}/downloads/trigger-drip` | manage_woocommerce | Manually trigger next drip content delivery |
+| `POST` | `/purecart/v1/subscriptions/{id}/courses/extend-access` | manage_woocommerce | Extend course_access_until by N days |
+| `POST` | `/purecart/v1/subscriptions/{id}/courses/revoke` | manage_woocommerce | Immediately revoke all LMS enrollments |
+| `POST` | `/purecart/v1/subscriptions/{id}/service/complete-deliverable` | manage_woocommerce | Mark current cycle deliverable as complete |
+| `POST` | `/purecart/v1/subscriptions/{id}/service/send-invoice` | manage_woocommerce | Manually send invoice for current cycle |
 
 ---
 
@@ -1070,6 +1239,35 @@ apply_filters( 'purecart_sub_avg_lifetime_months', 24 );
 
 // Filter: milo-compatible gateway scheduled payments support check
 apply_filters( 'purecart_gateway_scheduled_payments', $supports, $gateway_id );
+
+// ─── Delivery Type Hooks ───────────────────────────────────────────────────────
+
+// When membership tier is changed by admin
+do_action( 'purecart_membership_tier_changed', $subscription_id, $old_tier, $new_tier );
+
+// When membership grace period has fully expired and role is removed
+do_action( 'purecart_membership_grace_expired', $subscription_id );
+
+// When download quota is reset at the start of a new billing cycle
+do_action( 'purecart_download_quota_reset', $subscription_id, $new_limit );
+
+// When a drip content item is delivered to the subscriber
+do_action( 'purecart_drip_content_delivered', $subscription_id, $file_ids, $next_drip_date );
+
+// When a subscriber is enrolled in LMS courses on activation/renewal
+do_action( 'purecart_course_enrollment_granted', $subscription_id, $user_id, $course_ids, $access_until );
+
+// When LMS course access is revoked on cancellation/expiry
+do_action( 'purecart_course_access_revoked', $subscription_id, $user_id, $course_ids );
+
+// When a service deliverable is marked complete by admin
+do_action( 'purecart_deliverable_completed', $subscription_id, $completed_by, $notes );
+
+// Filter: grace period days for membership cancellation (override per-subscription)
+apply_filters( 'purecart_membership_grace_days', $days, $subscription_id );
+
+// Filter: LMS course IDs to enroll for a subscription (override per-subscription)
+apply_filters( 'purecart_lms_course_ids', $course_ids, $subscription_id, $product_id );
 ```
 
 ---
@@ -1114,6 +1312,12 @@ apply_filters( 'purecart_gateway_scheduled_payments', $supports, $gateway_id );
 | GDPR / privacy integration | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ | **✅** |
 | Linked to software license | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | add-on | **✅** |
 | Linked to SaaS account | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Membership delivery (role + tier) | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ (Pro) | ❌ | **✅** |
+| Membership grace period | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ (Pro) | ❌ | **✅** |
+| Digital download quota per cycle | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | **✅** |
+| Drip content delivery | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | add-on | **✅** |
+| LMS course enrollment delivery | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Service / retainer delivery | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | **✅** |
 | Stepped renewal pricing | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | **✅** |
 | Renewal sync to calendar date | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | **✅** |
 | Role assignment on status | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | **✅** |
@@ -1136,3 +1340,4 @@ apply_filters( 'purecart_gateway_scheduled_payments', $supports, $gateway_id );
 12. **Card expiry warnings + SCA reauth** — complete payment health coverage
 13. **Revenue ledger table** — separate table for clean MRR/ARR reporting
 14. **Built into PureCart** — no separate plugin install, no compatibility risk with PureCart modules
+15. **Six delivery types** — software, SaaS, membership, digital downloads, LMS courses, and service/retainer all handled by a single subscription engine with type-specific provisioning, lifecycle hooks, and admin actions
