@@ -41,8 +41,7 @@ module.exports = {
 	devtool: false,
 
 	entry: {
-		// 'assets/js/admin':  path.resolve( rootDir, 'src/main.jsx' ),
-		// 'assets/css/admin': path.resolve( rootDir, 'src/styles/main.scss' ),
+		'build/admin/admin':  path.resolve( rootDir, 'src/app/main.tsx' ),
 	},
 
 	output: {

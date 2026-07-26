@@ -20,10 +20,13 @@
         "make-pot":        "wp i18n make-pot . languages/purecart.pot --domain=purecart --exclude=node_modules,vendor,tests"
     },
     "devDependencies": {
+        "@tailwindcss/postcss": "^4.0.0",
         "@wordpress/scripts": "^30.23.0",
         "@actions/core": "^1.10.0",
         "npm-check-updates": "^16.14.20",
         "simple-git": "^3.27.0",
+        "tailwindcss": "^4.0.0",
+        "tw-animate-css": "^1.3.4",
         "webpack-remove-empty-scripts": "^1.1.1"
     },
     "dependencies": {

@@ -67,6 +67,15 @@ class Admin {
 			'purecart-settings',
 			array( $this, 'page_settings' )
 		);
+		// react dashbord
+		add_submenu_page(
+			'purecart-dashboard',
+			__( 'Dashboard', 'purecart' ),
+			__( 'Dashboard', 'purecart' ),
+			'manage_woocommerce',
+			'purecart-react-dashboard',
+			array( $this, 'page_react_dashboard' )
+		);
 	}
 
 	/**
@@ -82,6 +91,7 @@ class Admin {
 			'purecart_page_purecart-licenses',
 			'purecart_page_purecart-versions',
 			'purecart_page_purecart-settings',
+			'purecart_page_purecart-react-dashboard',
 		);
 
 		if ( ! in_array( $hook, $our_hooks, true ) && 'post.php' !== $hook && 'post-new.php' !== $hook ) {
@@ -90,6 +100,27 @@ class Admin {
 
 		wp_enqueue_style( 'purecart-admin', PURECART_URL . 'assets/css/admin.css', array(), PURECART_VERSION );
 		wp_enqueue_script( 'purecart-admin', PURECART_URL . 'assets/js/admin.js', array( 'jquery' ), PURECART_VERSION, true );
+
+		$asset_file =  PURECART_PATH . 'build/admin/admin.asset.php';
+		if ( ! file_exists( $asset_file ) ) {
+			return;
+		}
+		
+		$asset = require $asset_file;
+		wp_enqueue_style(
+			'wdd-admin',
+			 PURECART_URL . 'build/admin/admin.css',
+			[],
+			$asset['version']
+		);
+
+		wp_enqueue_script(
+			'wdd-admin',
+			 PURECART_URL . 'build/admin/admin.js',
+			$asset['dependencies'],
+			$asset['version'],
+			true
+		);
 
 		wp_localize_script(
 			'purecart-admin',
@@ -220,6 +251,16 @@ class Admin {
 				update_post_meta( $post_id, $meta_key, sanitize_text_field( wp_unslash( $_POST[ $post_key ] ) ) );
 			}
 		}
+	}
+
+	//react page_react_dashboard
+
+	public function page_react_dashboard(): void {
+		?>
+		<div class="wrap">
+			<div id="purecart-react-dashboard-root"></div>
+		</div>
+		<?php
 	}
 
 	/**

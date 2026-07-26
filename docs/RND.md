@@ -666,6 +666,10 @@ woo-digital-downloads/
 ├── admin/                           # WordPress admin UI
 │   ├── views/
 │   └── assets/
+├── src/                           # WordPress admin UI
+│   ├── app/
+│   ├── others/
+│   └── blocks/
 │
 ├── assets/                          # Frontend JS/CSS
 └── templates/                       # Email templates, dashboard templates
