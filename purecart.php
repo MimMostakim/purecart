@@ -38,21 +38,10 @@ define( 'PURECART_PLUGIN_DIR', PURECART_PATH );
 define( 'PURECART_PLUGIN_URL', PURECART_URL );
 define( 'PURECART_PLUGIN_FILE', PURECART_FILE );
 
-// Built-in PSR-4 autoloader for the PureCart\ namespace.
-// Works without `composer install` — plugin is fully self-contained.
-spl_autoload_register(
-	static function ( string $class ): void {
-		if ( strncmp( $class, 'PureCart\\', 9 ) !== 0 ) {
-			return;
-		}
-		$relative = substr( $class, 9 );
-		$file     = PURECART_PATH . 'includes' . DIRECTORY_SEPARATOR
-				. str_replace( '\\', DIRECTORY_SEPARATOR, $relative ) . '.php';
-		if ( file_exists( $file ) ) {
-			require_once $file;
-		}
-	}
-);
+// PSR-4 autoloader for the PureCart\ namespace.
+// Loaded manually — must be required before any PureCart\ class is referenced.
+require_once PURECART_PATH . 'includes/Autoloader.php';
+\PureCart\Autoloader::register( PURECART_PATH . 'includes' );
 
 // Optional Composer vendor autoloader (third-party deps only).
 if ( file_exists( PURECART_PATH . 'vendor/autoload.php' ) ) {

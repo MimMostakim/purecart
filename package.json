@@ -16,6 +16,7 @@
         "lint:pkg-json":   "wp-scripts lint-pkg-json",
         "packages-update": "wp-scripts packages-update",
         "plugin-zip":      "wp-scripts plugin-zip",
+		"update-version": "node update-version-and-changelog.js",
         "make-pot":        "wp i18n make-pot . languages/purecart.pot --domain=purecart --exclude=node_modules,vendor,tests"
     },
     "devDependencies": {

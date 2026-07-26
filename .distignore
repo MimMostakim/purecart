@@ -1,0 +1,55 @@
+# Files and directories excluded from the PureCart distribution build.
+# Used by `wp-scripts plugin-zip` and deployment pipelines.
+
+# Version control
+/.git
+/.gitignore
+/.gitattributes
+
+# GitHub / CI
+/.github
+
+# IDE and editor config
+/.vscode
+/.editorconfig
+/.nvmrc
+/.DS_Store
+
+# Node
+/node_modules
+/src
+package.json
+package-lock.json
+webpack.config.js
+postcss.config.js
+tsconfig.json
+
+# PHP dev tooling
+/vendor
+composer.json
+composer.lock
+phpcs.xml
+
+# Documentation (dev-only)
+/docs
+/dev-docs
+/dev-note
+/wiki
+/.wordpress-org
+
+# Markdown docs (not needed in the zip)
+CHANGELOG.md
+README.md
+CONTRIBUTING.md
+AGENTS.md
+ARCHITECTURE.md
+SECURITY.md
+
+# Build artefacts and misc
+.distignore
+.eslintignore
+.eslintrc
+.stylelintrc
+*.map
+update-version-and-changelog.js
+screenshot.png

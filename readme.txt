@@ -14,25 +14,29 @@ Sell software, SaaS, and any digital file on WooCommerce — with secure deliver
 
 == Description ==
 
-**PureCart for WooCommerce** adds three purpose-built product types to WooCommerce and the infrastructure to sell them:
+**PureCart for WooCommerce** adds three purpose-built product types to WooCommerce and the complete infrastructure to sell them:
 
-* **PureCart Plugin** — WordPress plugins and themes. Delivers a license key and a signed, expiring download token. Includes a self-hosted auto-update server so your customers receive plugin updates exactly like WordPress.org.
-* **PureCart SaaS** — Hosted software and web applications. Triggers signed webhook provisioning and delivers a unique API key.
+* **PureCart Plugin** — WordPress plugins, themes, and any downloadable software. Delivers a license key and a signed, expiring download token on purchase.
+* **PureCart SaaS** — Hosted software and web applications. Triggers signed webhook provisioning and delivers a unique API key to the customer.
 * **PureCart Bundle** — Product bundles. One purchase delivers multiple license keys and download files.
 
 = Core Features =
 
-**Secure Downloads** — Every file is streamed through PHP using signed, expiring tokens. No direct file URL is ever exposed.
+**Secure Downloads** — Every file is streamed through PHP using signed, expiring tokens. No direct file URL is ever exposed. Works for any file format: ZIPs, PDFs, executables, design assets.
 
-**Software Licensing** — Cryptographically secure license keys with configurable site limits (single, multi, unlimited, lifetime). Full REST API for runtime activation and deactivation.
+**Software Licensing** — Cryptographically secure license keys with configurable site limits (single, multi, unlimited, lifetime). Full REST API for runtime activation and deactivation by the customer's application.
 
-**Plugin Auto-Updates** — Self-hosted update server. Upload ZIPs with changelogs. Customers receive updates via the standard WordPress updater.
+**SaaS Provisioning** — Webhook-based account creation at checkout. API key delivery. HMAC-SHA256 signed payloads. Suspend and reactivate accounts directly from WooCommerce orders.
 
-**SaaS Provisioning** — Webhook-based account creation at checkout. API key delivery. HMAC-SHA256 signed payloads. Suspend and reactivate accounts from WooCommerce orders.
+**Customer Dashboard** — My Account tabs for licenses, downloads, and API keys. Customers self-manage their purchases without contacting support.
 
 **Subscription Billing** — Recurring billing via Action Scheduler. Dunning for failed payments.
 
 **HPOS Compatible** — Full compatibility with WooCommerce High Performance Order Storage.
+
+= Plugin Auto-Update Server (Separate Add-On) =
+
+A self-hosted update server that lets your customers receive plugin updates through the standard WordPress updater is available as a **separate add-on**, distributed outside WordPress.org. This keeps the core plugin fully free and unrestricted while giving you the option to add update delivery when your business needs it.
 
 = For Developers =
 
@@ -50,17 +54,6 @@ Sell software, SaaS, and any digital file on WooCommerce — with secure deliver
 == External Services ==
 
 PureCart does not send data to any third-party service. Everything runs entirely on your own WordPress installation. The sections below explain what data moves between your site and your customers.
-
-= Update Server & License API (WordPress plugins, themes, and software) =
-
-When you sell a WordPress plugin, theme, or any software product, your customers' WordPress sites connect to your own site's REST API to check for updates and validate license keys:
-
-* **Endpoint:** `https://yoursite.com/wp-json/purecart/v1/update-check`
-* **Data received from your customer's site:** plugin slug, currently installed version, and optionally a license key.
-* **Data returned to your customer's site:** version number, changelog, compatibility metadata, and — only if a valid active license key was supplied — a one-time download URL.
-* **No data is forwarded to any third party.** All processing happens on your server.
-
-Your customers agree to this data exchange when they purchase a license from your store. You are responsible for documenting it in your own store's Privacy Policy.
 
 = License Activation & Deactivation API =
 
@@ -94,5 +87,16 @@ Ensure that whatever endpoint receives this webhook has its own Privacy Policy c
 
 == Changelog ==
 
-= 1.0.0 =
+= PureCart/v1.0.2 - 2026-07-16 =
+* Added: Add WordPress.org banner.
+* Fixed: Fixed a bug in the license activation API that caused false negatives for valid license keys.
+* Refactor: Moved the PSR-4 autoloader into a dedicated `Autoloader` class.
+
+= PureCart/v1.0.1 - 2026-07-16 =
+* Compliance: Removed the self-hosted update server from the WordPress.org version.
+* Fix: Corrected `$_SERVER['HTTP_USER_AGENT']` sanitization and added missing PHPDoc comments.
+* Docs: Added `External Services` documentation and a `CONTRIBUTING.md` guide.
+* Build: Updated Tailwind CSS v4, TypeScript, PostCSS, and distribution configuration.
+
+= PureCart/v1.0.0 - 2026-06-16 =
 * Initial release.

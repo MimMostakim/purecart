@@ -2,22 +2,22 @@
 # PureCart — .gitignore
 # ============================================================
 
-# ── Composer ─────────────────────────────────────────────────
+#  Composer 
 /vendor/
 composer.lock
 
-# ── Node / NPM ───────────────────────────────────────────────
+# Node / NPM 
 /node_modules/
 npm-debug.log*
 yarn-error.log
 package-lock.json
 yarn.lock
 
-# ── Build output ─────────────────────────────────────────────
+# Build output 
 /dist/
 /build/
 
-# ── PHP tools ────────────────────────────────────────────────
+# PHP tools 
 /.phpunit.cache/
 /.phpunit.result.cache
 /phpunit.xml
@@ -25,13 +25,13 @@ yarn.lock
 /.phpstan/
 /phpstan.neon
 
-# ── Environment & secrets ────────────────────────────────────
+# Environment & secrets
 .env
 .env.*
 !.env.example
 *.secret
 
-# ── OS files ─────────────────────────────────────────────────
+# OS files
 .DS_Store
 .DS_Store?
 ._*
@@ -40,7 +40,7 @@ yarn.lock
 Thumbs.db
 Desktop.ini
 
-# ── IDE / Editor ─────────────────────────────────────────────
+# IDE / Editor 
 .idea/
 .vscode/
 *.swp
@@ -49,21 +49,21 @@ Desktop.ini
 .project
 .settings/
 
-# ── WordPress specifics ──────────────────────────────────────
+# WordPress specifics
 # Ignore uploaded plugin ZIPs stored locally during dev
 /uploads/
 /tmp/
 
-# ── Logs ─────────────────────────────────────────────────────
+# Logs 
 *.log
 /logs/
 
-# ── Test coverage ────────────────────────────────────────────
+# Test coverage 
 /coverage/
 /tests/coverage/
 .nyc_output/
 
-# ── Plugin ZIP releases ──────────────────────────────────────
+# Plugin ZIP releases
 # Built release ZIPs sit outside the repo
 *.zip
 !tests/fixtures/*.zip

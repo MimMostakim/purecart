@@ -1,0 +1,84 @@
+###
+## Git Attributes — PureCart for WooCommerce
+##
+## @link https://git-scm.com/docs/gitattributes
+###
+
+## -----------------------------------------------------------------------------
+## Line endings — normalise to LF in the repository.
+## -----------------------------------------------------------------------------
+
+* text=auto eol=lf
+
+## -----------------------------------------------------------------------------
+## Binary files — never diff or modify.
+## -----------------------------------------------------------------------------
+
+*.gif   binary
+*.ico   binary
+*.jpg   binary
+*.jpeg  binary
+*.png   binary
+*.webp  binary
+*.eot   binary
+*.ttf   binary
+*.woff  binary
+*.woff2 binary
+*.zip   binary
+*.map   binary
+
+## -----------------------------------------------------------------------------
+## Export ignore — excluded from `git archive` and distribution ZIPs.
+## Keep in sync with .distignore.
+## -----------------------------------------------------------------------------
+
+# Version control
+.gitattributes export-ignore
+.gitignore export-ignore
+
+# GitHub / CI
+/.github export-ignore
+
+# IDE and editor config
+/.vscode export-ignore
+.editorconfig export-ignore
+.nvmrc export-ignore
+.DS_Store export-ignore
+
+# Node
+/node_modules export-ignore
+/src export-ignore
+package.json export-ignore
+package-lock.json export-ignore
+webpack.config.js export-ignore
+postcss.config.js export-ignore
+tsconfig.json export-ignore
+.eslintignore export-ignore
+.eslintrc export-ignore
+.stylelintrc export-ignore
+
+# PHP dev tooling
+/vendor export-ignore
+composer.json export-ignore
+composer.lock export-ignore
+phpcs.xml export-ignore
+
+# Documentation (dev-only)
+/docs export-ignore
+/dev-docs export-ignore
+/dev-note export-ignore
+/wiki export-ignore
+/.wordpress-org export-ignore
+
+# Markdown docs
+README.md export-ignore
+CHANGELOG.md export-ignore
+CONTRIBUTING.md export-ignore
+AGENTS.md export-ignore
+ARCHITECTURE.md export-ignore
+SECURITY.md export-ignore
+
+# Build artefacts and misc
+.distignore export-ignore
+update-version-and-changelog.js export-ignore
+screenshot.png export-ignore

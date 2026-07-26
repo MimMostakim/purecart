@@ -14,7 +14,6 @@ namespace PureCart\API;
 defined( 'ABSPATH' ) || exit;
 
 use PureCart\Licensing\LicenseActivator;
-use PureCart\Updates\UpdateServer;
 use PureCart\Downloads\DownloadDispatcher;
 
 /**
@@ -28,7 +27,6 @@ class RestApi {
 	 * @since 1.0.0
 	 */
 	public function __construct() {
-		new UpdateServer();
 		new DownloadDispatcher();
 
 		add_action( 'rest_api_init', array( $this, 'register_routes' ) );
