@@ -1,4 +1,4 @@
-import { Package, ChevronLeft, ChevronRight, Lock } from 'lucide-react';
+import { Package, ChevronLeft, ChevronRight } from 'lucide-react';
 import { M3, NAV_SCHEMA } from '../../utils/static-data';
 import type { Page } from '../../utils/static-data';
 
@@ -7,13 +7,11 @@ export function Sidebar( {
 	onNav,
 	collapsed,
 	onToggle,
-	enabledModules,
 }: {
 	activePage: Page;
 	onNav: ( p: Page ) => void;
 	collapsed: boolean;
 	onToggle: () => void;
-	enabledModules: Set< string >;
 } ) {
 	return (
 		<aside
@@ -80,26 +78,12 @@ export function Sidebar( {
 			{ /* Nav */ }
 			<nav className="flex-1 px-3 overflow-y-auto pb-4">
 				{ NAV_SCHEMA.map( ( item ) => {
-					const active =
-						activePage === item.id ||
-						( item.id === 'analytics' &&
-							activePage.startsWith( 'analytics' ) );
-					const enabled =
-						item.moduleKey === null ||
-						enabledModules.has( item.moduleKey );
+					const active = activePage === item.id;
 					const Icon = item.icon;
 					return (
 						<div key={ item.id }>
-							{ item.dividerBefore && (
-								<div
-									className="my-2"
-									style={ {
-										borderTop: `1px solid ${ M3.outlineVariant }`,
-									} }
-								/>
-							) }
 							<button
-								onClick={ () => enabled && onNav( item.id ) }
+								onClick={ () => onNav( item.id ) }
 								className="relative flex items-center w-full transition-all mb-0.5"
 								style={ {
 									height: 56,
@@ -110,9 +94,8 @@ export function Sidebar( {
 									color: active
 										? M3.onSecondaryContainer
 										: M3.onSurfaceVariant,
-									opacity: enabled ? 1 : 0.38,
 									border: 'none',
-									cursor: enabled ? 'pointer' : 'default',
+									cursor: 'pointer',
 									paddingLeft: collapsed ? 0 : 16,
 									paddingRight: collapsed ? 0 : 16,
 									justifyContent: collapsed
@@ -121,7 +104,7 @@ export function Sidebar( {
 									gap: collapsed ? 0 : 12,
 								} }
 								onMouseEnter={ ( e ) => {
-									if ( ! active && enabled )
+									if ( ! active )
 										(
 											e.currentTarget as HTMLElement
 										 ).style.backgroundColor =
@@ -146,12 +129,6 @@ export function Sidebar( {
 									>
 										{ item.label }
 									</span>
-								) }
-								{ ! enabled && ! collapsed && (
-									<Lock
-										size={ 12 }
-										className="ml-auto opacity-60"
-									/>
 								) }
 							</button>
 						</div>

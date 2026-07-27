@@ -1,5 +1,5 @@
 import { ChevronRight, HelpCircle, Bell } from 'lucide-react';
-import { M3, PAGE_TITLES, CUSTOMER_SARAH } from '../../utils/static-data';
+import { M3, PAGE_TITLES } from '../../utils/static-data';
 import type { Page } from '../../utils/static-data';
 import { IconButton } from './IconButton';
 
@@ -13,25 +13,8 @@ export function TopBar( {
 	const crumbs: Array< { label: string; page?: Page } > = [
 		{ label: 'PureCart -  Digital Downloads' },
 	];
-	if ( page.startsWith( 'analytics-' ) ) {
-		crumbs.push( { label: 'Analytics', page: 'analytics' } );
-		crumbs.push( { label: PAGE_TITLES[ page ] } );
-	} else if ( page === 'customer-detail' ) {
-		crumbs.push( { label: 'Licenses', page: 'licenses' } );
-		crumbs.push( { label: CUSTOMER_SARAH.name } );
-	} else if ( page === 'saas-detail' ) {
-		crumbs.push( { label: 'SaaS Accounts', page: 'saas' } );
-		crumbs.push( { label: 'Account Details' } );
-	} else if ( page === 'affiliate-detail' ) {
-		crumbs.push( { label: 'Affiliates', page: 'affiliates' } );
-		crumbs.push( { label: 'Affiliate Details' } );
-	} else if ( page === 'license-summary' ) {
-		crumbs.push( { label: 'Licenses', page: 'licenses' } );
-		crumbs.push( { label: 'Summary' } );
-	} else if ( page === 'license-detail' ) {
-		crumbs.push( { label: 'Licenses', page: 'licenses' } );
-		crumbs.push( { label: 'License Detail' } );
-	} else if ( page !== 'overview' ) {
+	if ( page === 'subscription-analytics' ) {
+		crumbs.push( { label: 'Subscriptions', page: 'subscriptions' } );
 		crumbs.push( { label: PAGE_TITLES[ page ] } );
 	}
 
