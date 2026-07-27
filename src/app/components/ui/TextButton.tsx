@@ -1,5 +1,27 @@
+/**
+ * TextButton UI component.
+ *
+ * Renders a Material Design 3 text button with no background or border.
+ * Supports primary and danger color variants and a compact small size mode.
+ *
+ * @file
+ * @since 1.0.0
+ */
 import { M3 } from '../../utils/static-data';
 
+/**
+ * Renders a borderless pill-shaped text button following M3 text button specs.
+ *
+ * @since 1.0.0
+ *
+ * @param {Object}          props           Component props.
+ * @param {React.ReactNode} props.children  Button label or inner content.
+ * @param {Function}        [props.onClick] Click handler callback.
+ * @param {boolean}         [props.danger]  Applies error color text when true.
+ * @param {boolean}         [props.small]   Renders a compact size variant when true.
+ *
+ * @return {JSX.Element} A styled text button element.
+ */
 export function TextButton( {
 	children,
 	onClick,

@@ -1,12 +1,44 @@
+/**
+ * Toast UI component.
+ *
+ * Renders a fixed-position notification snackbar that slides up from the
+ * bottom center of the screen. Visibility is controlled externally via the
+ * visible prop; the host component is responsible for auto-dismissal timing.
+ *
+ * @file
+ * @since 1.0.0
+ */
 import { CheckCircle, AlertCircle, XCircle } from 'lucide-react';
 import { M3 } from '../../utils/static-data';
 
+/**
+ * Props for the Toast component.
+ *
+ * @since 1.0.0
+ *
+ * @typedef  {Object}  ToastProps
+ * @property {string}  message  Notification text displayed inside the toast.
+ * @property {'success'|'info'|'warning'|'error'} type Determines icon and accent color.
+ * @property {boolean} visible  Controls opacity and slide-in animation state.
+ */
 export interface ToastProps {
 	message: string;
 	type: 'success' | 'info' | 'warning' | 'error';
 	visible: boolean;
 }
 
+/**
+ * Renders a bottom-center toast notification with icon and message text.
+ *
+ * The element is always present in the DOM but transitions between visible
+ * and hidden states via opacity and translateY to enable CSS animation.
+ *
+ * @since 1.0.0
+ *
+ * @param {ToastProps} props Component props.
+ *
+ * @return {JSX.Element} The fixed-position toast notification element.
+ */
 export function Toast( { message, type, visible }: ToastProps ) {
 	const colors = {
 		success: M3.success,

@@ -1,7 +1,31 @@
+/**
+ * ConfirmDialog UI component.
+ *
+ * Renders a modal confirmation dialog with optional icon, title, body content,
+ * and a confirm/cancel action pair. Supports danger styling for destructive actions.
+ *
+ * @file
+ * @since 1.0.0
+ */
 import { M3 } from '../../utils/static-data';
 import { TextButton } from './TextButton';
 import { FilledButton } from './FilledButton';
 
+/**
+ * Props for the ConfirmDialog component.
+ *
+ * @since 1.0.0
+ *
+ * @typedef  {Object}            ConfirmDialogProps
+ * @property {boolean}           open          Controls dialog visibility.
+ * @property {string}            title         Heading text displayed in the dialog.
+ * @property {React.ReactNode}   body          Body content rendered below the title.
+ * @property {string}            confirmLabel  Label for the primary confirm button.
+ * @property {boolean}           [danger]      Applies error styling to the confirm button when true.
+ * @property {React.ElementType} [icon]        Optional icon rendered above the title.
+ * @property {Function}          onConfirm     Callback invoked when the confirm button is clicked.
+ * @property {Function}          onCancel      Callback invoked when the cancel button or backdrop is clicked.
+ */
 export interface ConfirmDialogProps {
 	open: boolean;
 	title: string;
@@ -13,6 +37,18 @@ export interface ConfirmDialogProps {
 	onCancel: () => void;
 }
 
+/**
+ * Renders a modal confirmation dialog over a semi-transparent backdrop.
+ *
+ * Returns null when the dialog is not open. Clicking the backdrop triggers
+ * the onCancel callback.
+ *
+ * @since 1.0.0
+ *
+ * @param {ConfirmDialogProps} props Component props.
+ *
+ * @return {JSX.Element|null} The modal overlay, or null when closed.
+ */
 export function ConfirmDialog( {
 	open,
 	title,

@@ -1,7 +1,29 @@
+/**
+ * ActionDropdown UI component.
+ *
+ * Renders a three-dot vertical menu button with a floating dropdown list of
+ * actions. Supports optional dividers, danger styles, and disabled states.
+ *
+ * @file
+ * @since 1.0.0
+ */
 import { useState } from 'react';
 import { MoreVertical } from 'lucide-react';
 import { M3 } from '../../utils/static-data';
 
+/**
+ * Describes a single action item displayed in the dropdown menu.
+ *
+ * @since 1.0.0
+ *
+ * @typedef  {Object}   ActionItem
+ * @property {string}            label         Display label for the action.
+ * @property {React.ElementType} icon          Lucide icon component rendered beside the label.
+ * @property {boolean}           [danger]      Renders the item in error color when true.
+ * @property {boolean}           [disabled]    Prevents the action from firing when true.
+ * @property {boolean}           [dividerBefore] Renders a separator above this item when true.
+ * @property {Function}          onClick       Callback invoked when the item is selected.
+ */
 export interface ActionItem {
 	label: string;
 	icon: React.ElementType;
@@ -11,6 +33,17 @@ export interface ActionItem {
 	onClick: () => void;
 }
 
+/**
+ * Renders a vertical three-dot icon button that opens a floating action menu.
+ *
+ * @since 1.0.0
+ *
+ * @param {Object}       props         Component props.
+ * @param {ActionItem[]} props.actions List of action items to display in the dropdown.
+ * @param {string}       [props.hint]  Optional hint text shown at the top of the menu.
+ *
+ * @return {JSX.Element} The dropdown trigger button and floating menu overlay.
+ */
 export function ActionDropdown( {
 	actions,
 	hint,

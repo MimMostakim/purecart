@@ -1,3 +1,12 @@
+/**
+ * PureCart UI component library barrel export.
+ *
+ * Re-exports all shared UI primitives used across the PureCart admin panel.
+ * Import from this file rather than from individual component paths.
+ *
+ * @file
+ * @since 1.0.0
+ */
 export { StatusBadge } from './StatusBadge';
 export { TrendChip } from './TrendChip';
 export { Card } from './Card';

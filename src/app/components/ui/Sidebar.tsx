@@ -2,6 +2,24 @@ import { Package, ChevronLeft, ChevronRight } from 'lucide-react';
 import { M3, NAV_SCHEMA } from '../../utils/static-data';
 import type { Page } from '../../utils/static-data';
 
+/**
+ * Renders the collapsible admin navigation sidebar.
+ *
+ * Iterates over NAV_SCHEMA to build nav items, applying active and enabled
+ * states. Items whose moduleKey is not present in enabledModules are rendered
+ * at reduced opacity with a lock icon and are non-interactive.
+ *
+ * @since 1.0.0
+ *
+ * @param {Object}      props                Component props.
+ * @param {Page}        props.activePage     The currently active page identifier.
+ * @param {Function}    props.onNav          Callback invoked with the target Page when a nav item is clicked.
+ * @param {boolean}     props.collapsed      Controls whether the sidebar renders in narrow collapsed mode.
+ * @param {Function}    props.onToggle       Callback invoked when the collapse/expand chevron button is clicked.
+ * @param {Set<string>} props.enabledModules Set of module name strings that are currently enabled.
+ *
+ * @return {JSX.Element} The aside navigation sidebar element.
+ */
 export function Sidebar( {
 	activePage,
 	onNav,

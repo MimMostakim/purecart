@@ -1,5 +1,29 @@
+/**
+ * StatusBadge UI component.
+ *
+ * Renders a colored pill badge representing a record status value. Maps known
+ * status strings to M3 color pairs. Falls back to a neutral 'Pending' style
+ * for unrecognized status values.
+ *
+ * @file
+ * @since 1.0.0
+ */
 import { M3 } from '../../utils/static-data';
 
+/**
+ * Renders a small rounded pill badge for a given status string.
+ *
+ * Recognized status values: active, expired, suspended, revoked, paused,
+ * cancelled, past-due, trialing, pending. Unrecognized values fall back
+ * to the pending style.
+ *
+ * @since 1.0.0
+ *
+ * @param {Object} props        Component props.
+ * @param {string} props.status Status string used to determine badge color and label.
+ *
+ * @return {JSX.Element} A colored pill span element displaying the status label.
+ */
 export function StatusBadge( { status }: { status: string } ) {
 	const styles: Record<
 		string,
