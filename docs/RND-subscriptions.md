@@ -344,6 +344,311 @@ When a downgrade is offered via the retention flow, it is scheduled for the next
 | `SubscriptionReport` | `includes/Subscriptions/SubscriptionReport.php` | Admin reports and CSV export |
 | `SubscriptionListTable` | `includes/Admin/SubscriptionListTable.php` | WP_List_Table implementation |
 | `PrivacyHandler` | `includes/Subscriptions/PrivacyHandler.php` | GDPR data export + erase integration |
+| `CustomerPortal` | `includes/Subscriptions/CustomerPortal.php` | My Account endpoint registration, AJAX handlers, customer self-service actions |
+| `DeliveryManager` | `includes/Subscriptions/DeliveryManager.php` | Dispatches provisioning for all 6 delivery types on lifecycle events |
+
+---
+
+## WooCommerce Integration
+
+This section specifies every WooCommerce hook, filter, and compatibility point that PureCart's subscription module must implement. These are WC-defined contracts — missing any one of them causes checkout failures, My Account breakage, or payment processing errors.
+
+---
+
+### Product Type Registration
+
+```php
+// Register the custom product type class
+add_filter( 'woocommerce_product_class', function( $classname, $product_type ) {
+    if ( 'purecart_subscription' === $product_type ) {
+        return 'PC_Product_Subscription';
+    }
+    return $classname;
+}, 10, 2 );
+
+// Register the product type so it appears in the product type dropdown
+add_filter( 'product_type_selector', function( $types ) {
+    $types['purecart_subscription'] = __( 'Subscription', 'purecart' );
+    return $types;
+} );
+```
+
+`PC_Product_Subscription extends WC_Product` — must override:
+- `get_type()` → `'purecart_subscription'`
+- `is_purchasable()` — return `false` if subscription limit reached for this customer
+- `add_to_cart_url()` — return standard add-to-cart URL; handled by WC checkout
+- `supports( $feature )` — declare support for `'subscriptions'` feature string
+
+**Variable subscription support:** for product type `'purecart_variable_subscription'`, extend `WC_Product_Variable`. Each variation stores its own `_purecart_sub_price`, `_purecart_sub_interval`, `_purecart_sub_period`.
+
+**Product data tabs (admin edit screen):**
+```php
+add_filter( 'woocommerce_product_data_tabs', function( $tabs ) {
+    $tabs['purecart_subscription'] = [
+        'label'    => __( 'Subscription', 'purecart' ),
+        'target'   => 'purecart_subscription_options',
+        'class'    => [ 'show_if_purecart_subscription', 'show_if_purecart_variable_subscription' ],
+        'priority' => 11,
+    ];
+    return $tabs;
+} );
+
+add_action( 'woocommerce_product_data_panels', 'PC_SubscriptionProduct::render_options_panel' );
+add_action( 'woocommerce_process_product_meta', 'PC_SubscriptionProduct::save_product_meta' );
+add_action( 'woocommerce_save_product_variation', 'PC_SubscriptionProduct::save_variation_meta', 10, 2 );
+```
+
+---
+
+### Checkout Integration
+
+```php
+// Create subscription when initial order is completed
+add_action( 'woocommerce_payment_complete', 'PC_SubscriptionManager::maybe_create_from_order' );
+add_action( 'woocommerce_order_status_processing', 'PC_SubscriptionManager::maybe_create_from_order' );
+
+// Display subscription details in checkout order summary
+add_filter( 'woocommerce_get_item_data', 'PC_SubscriptionProduct::display_item_data', 10, 2 );
+
+// Modify totals display: show recurring amount + trial note
+add_filter( 'woocommerce_cart_totals_order_total_html', 'PC_SubscriptionProduct::cart_total_html' );
+
+// Override needs_payment for $0 trial checkout
+add_filter( 'woocommerce_cart_needs_payment', 'PC_SubscriptionProduct::cart_needs_payment' );
+
+// Block mixed subscription + subscription cart (configurable)
+add_filter( 'woocommerce_add_to_cart_validation', 'PC_SubscriptionProduct::validate_add_to_cart', 10, 3 );
+
+// Subscription checkout field: payment method must support tokenization
+add_filter( 'woocommerce_available_payment_gateways', 'PC_SubscriptionProduct::filter_gateways_for_subscriptions' );
+```
+
+`filter_gateways_for_subscriptions` removes any gateway that does not support `'tokenization'` or `'subscriptions'` when the cart contains a subscription product.
+
+---
+
+### HPOS Compatibility Declaration
+
+Must be declared on `before_woocommerce_init`:
+
+```php
+add_action( 'before_woocommerce_init', function() {
+    if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility(
+            'custom_order_tables',
+            PURECART_FILE,
+            true
+        );
+    }
+} );
+```
+
+Renewal orders are standard WooCommerce orders created via `wc_create_order()`. They carry order meta `_purecart_renewal_for` (subscription ID) and `_purecart_renewal_order` = `'yes'` to distinguish them from initial orders. All order reads/writes use `wc_get_order()` — never direct `get_post()`.
+
+---
+
+### WooCommerce Blocks Compatibility
+
+```php
+add_action( 'before_woocommerce_init', function() {
+    if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility(
+            'cart_checkout_blocks',
+            PURECART_FILE,
+            true   // Phase 1: compatible but no block-specific extensions yet
+        );
+    }
+} );
+```
+
+Phase 1 declares compatibility so WC does not show admin warnings. Block-specific integrations (registering `IntegrationInterface`) are Phase 3.
+
+---
+
+### Email Class Registration
+
+All 37 subscription emails (25 core + 12 type-specific) must be registered as `WC_Email` subclasses:
+
+```php
+add_filter( 'woocommerce_email_classes', function( $emails ) {
+    // Core
+    $emails['PC_Email_SubscriptionRenewalReminder']  = new PC_Email_SubscriptionRenewalReminder();
+    $emails['PC_Email_SubscriptionRenewed']          = new PC_Email_SubscriptionRenewed();
+    $emails['PC_Email_SubscriptionActivated']        = new PC_Email_SubscriptionActivated();
+    $emails['PC_Email_SubscriptionCancelled']        = new PC_Email_SubscriptionCancelled();
+    $emails['PC_Email_SubscriptionExpired']          = new PC_Email_SubscriptionExpired();
+    $emails['PC_Email_SubscriptionPaused']           = new PC_Email_SubscriptionPaused();
+    $emails['PC_Email_SubscriptionResumed']          = new PC_Email_SubscriptionResumed();
+    $emails['PC_Email_SubscriptionTrialEnding']      = new PC_Email_SubscriptionTrialEnding();
+    $emails['PC_Email_SubscriptionPaymentFailed']    = new PC_Email_SubscriptionPaymentFailed();
+    $emails['PC_Email_SubscriptionSuspended']        = new PC_Email_SubscriptionSuspended();
+    $emails['PC_Email_CardExpiring']                 = new PC_Email_CardExpiring();
+    $emails['PC_Email_ScaRequired']                  = new PC_Email_ScaRequired();
+    $emails['PC_Email_CardUpdateRequest']            = new PC_Email_CardUpdateRequest();
+    $emails['PC_Email_SubscriptionSkipped']          = new PC_Email_SubscriptionSkipped();
+    $emails['PC_Email_EarlyRenewalAvailable']        = new PC_Email_EarlyRenewalAvailable();
+    $emails['PC_Email_PlanChanged']                  = new PC_Email_PlanChanged();
+    $emails['PC_Email_RetentionOfferAccepted']       = new PC_Email_RetentionOfferAccepted();
+    $emails['PC_Email_SubscriptionResubscribed']     = new PC_Email_SubscriptionResubscribed();
+    $emails['PC_Email_PendingCancellation']          = new PC_Email_PendingCancellation();
+    $emails['PC_Email_RenewalInvoice']               = new PC_Email_RenewalInvoice();
+    $emails['PC_Email_SubscriptionOnHold']           = new PC_Email_SubscriptionOnHold();
+    $emails['PC_Email_SubscriptionCompleted']        = new PC_Email_SubscriptionCompleted();
+    $emails['PC_Email_SteppedPriceChanging']         = new PC_Email_SteppedPriceChanging();
+    $emails['PC_Email_SubscriptionDowngraded']       = new PC_Email_SubscriptionDowngraded();
+    $emails['PC_Email_SubscriptionUpgraded']         = new PC_Email_SubscriptionUpgraded();
+    // Type-specific
+    $emails['PC_Email_MembershipTierChanged']        = new PC_Email_MembershipTierChanged();
+    $emails['PC_Email_MembershipAccessExpiring']     = new PC_Email_MembershipAccessExpiring();
+    $emails['PC_Email_MembershipGracePeriod']        = new PC_Email_MembershipGracePeriod();
+    $emails['PC_Email_MembershipRoleRevoked']        = new PC_Email_MembershipRoleRevoked();
+    $emails['PC_Email_NewContentDrip']               = new PC_Email_NewContentDrip();
+    $emails['PC_Email_DownloadQuotaReset']           = new PC_Email_DownloadQuotaReset();
+    $emails['PC_Email_DownloadLimitReached']         = new PC_Email_DownloadLimitReached();
+    $emails['PC_Email_CourseAccessGranted']          = new PC_Email_CourseAccessGranted();
+    $emails['PC_Email_CourseAccessExpiring']         = new PC_Email_CourseAccessExpiring();
+    $emails['PC_Email_CourseAccessRevoked']          = new PC_Email_CourseAccessRevoked();
+    $emails['PC_Email_DeliverableSubmitted']         = new PC_Email_DeliverableSubmitted();
+    $emails['PC_Email_ServiceInvoice']               = new PC_Email_ServiceInvoice();
+    return $emails;
+} );
+```
+
+Each class must:
+- Set `$this->id`, `$this->title`, `$this->description`, `$this->template_html`, `$this->template_plain`
+- Override `trigger( $subscription_id )` to set `$this->object` and call `$this->send()`
+- Template files: `woocommerce/emails/purecart-{email-slug}.php` (overridable by theme)
+
+---
+
+### Payment Token Integration
+
+Saved payment methods are stored as `WC_Payment_Token` records linked to the customer. PureCart reads the token from the subscription's `payment_token_id` field, which references a `WC_Payment_Token` ID.
+
+```php
+// When a customer deletes a saved payment method, check if any subscriptions depend on it
+add_action( 'woocommerce_payment_token_deleted', function( $token_id, $token ) {
+    // Find subscriptions using this token; update status or notify admin
+    PC_HealthCheck::handle_token_deleted( $token_id );
+}, 10, 2 );
+
+// When a customer sets a new default payment method
+add_action( 'woocommerce_payment_token_set_default', function( $token_id ) {
+    // Update payment_token_id on all active subscriptions for this customer
+    PC_SubscriptionManager::update_customer_token( get_current_user_id(), $token_id );
+} );
+```
+
+Payment method update flow (SCA card update):
+1. Admin or dunning triggers `POST /purecart/v1/subscriptions/{id}/send-card-update`
+2. Email sent to customer with `wc_get_endpoint_url( 'payment-methods', '', wc_get_page_permalink( 'myaccount' ) )` link
+3. Customer adds new card → WC Payment Token created
+4. Customer selects it as default → `woocommerce_payment_token_set_default` fires → subscription token updated
+
+---
+
+### My Account Endpoint Registration
+
+WooCommerce My Account uses a rewrite endpoint system. PureCart registers two endpoints:
+
+```php
+add_action( 'init', function() {
+    add_rewrite_endpoint( 'purecart-subscriptions', EP_ROOT | EP_PAGES );
+    add_rewrite_endpoint( 'purecart-subscription', EP_ROOT | EP_PAGES );
+} );
+```
+
+**Note:** `flush_rewrite_rules()` must be called on plugin activation (not on every load).
+
+```php
+// Add "Subscriptions" to My Account navigation
+add_filter( 'woocommerce_account_menu_items', function( $items ) {
+    $logout = $items['customer-logout'] ?? null;
+    unset( $items['customer-logout'] );
+    $items['purecart-subscriptions'] = __( 'Subscriptions', 'purecart' );
+    if ( $logout ) {
+        $items['customer-logout'] = $logout;
+    }
+    return $items;
+} );
+
+// Register endpoint URL slug in WC options (allows slug customization)
+add_filter( 'woocommerce_get_query_vars', function( $vars ) {
+    $vars['purecart-subscriptions'] = get_option( 'woocommerce_myaccount_purecart_subscriptions_endpoint', 'purecart-subscriptions' );
+    $vars['purecart-subscription']  = get_option( 'woocommerce_myaccount_purecart_subscription_endpoint', 'purecart-subscription' );
+    return $vars;
+} );
+
+// Set page title for the endpoint
+add_filter( 'woocommerce_endpoint_purecart-subscriptions_title', function() {
+    return __( 'Subscriptions', 'purecart' );
+} );
+add_filter( 'woocommerce_endpoint_purecart-subscription_title', function() {
+    return __( 'Subscription Details', 'purecart' );
+} );
+
+// Render the list page
+add_action( 'woocommerce_account_purecart-subscriptions_endpoint', function() {
+    wc_get_template(
+        'myaccount/purecart-subscriptions.php',
+        [ 'subscriptions' => PC_CustomerPortal::get_customer_subscriptions() ],
+        '',
+        PURECART_TEMPLATE_PATH
+    );
+} );
+
+// Render the detail page
+add_action( 'woocommerce_account_purecart-subscription_endpoint', function( $subscription_id ) {
+    $subscription = PC_SubscriptionManager::get( absint( $subscription_id ) );
+    if ( ! $subscription || $subscription->user_id !== get_current_user_id() ) {
+        wc_add_notice( __( 'Invalid subscription.', 'purecart' ), 'error' );
+        wp_redirect( wc_get_account_endpoint_url( 'purecart-subscriptions' ) );
+        exit;
+    }
+    wc_get_template(
+        'myaccount/purecart-subscription-detail.php',
+        [ 'subscription' => $subscription ],
+        '',
+        PURECART_TEMPLATE_PATH
+    );
+} );
+```
+
+**WC Admin → Settings → Advanced → Account endpoints** — option key must be registered so admins can customize the slug:
+- `woocommerce_myaccount_purecart_subscriptions_endpoint` (default: `purecart-subscriptions`)
+- `woocommerce_myaccount_purecart_subscription_endpoint` (default: `purecart-subscription`)
+
+---
+
+### WooCommerce Admin Order List Integration
+
+Renewal orders should be visually linked back to their subscription in the WC admin Orders list:
+
+```php
+// Add "Renewal for Subscription #X" column or order note
+add_filter( 'woocommerce_admin_order_actions', 'PC_Admin::add_subscription_link_to_order', 10, 2 );
+add_action( 'woocommerce_admin_order_data_after_order_details', 'PC_Admin::render_subscription_meta_box' );
+```
+
+The WC order detail screen shows a "Subscription" meta box linking to the PureCart subscription admin page.
+
+---
+
+### WooCommerce Analytics Integration
+
+```php
+// Register subscription revenue as a separate revenue source in WC Analytics
+add_filter( 'woocommerce_analytics_revenue_query_args', function( $args ) {
+    // Exclude renewal orders from WC's standard revenue total (they're tracked in wp_purecart_subscription_revenue)
+    $args['exclude_order_meta'] = array_merge(
+        $args['exclude_order_meta'] ?? [],
+        [ '_purecart_renewal_order' ]
+    );
+    return $args;
+} );
+```
+
+Phase 2: Register a custom WC Analytics data store for MRR/ARR in WC Analytics reports.
 
 ---
 
@@ -1144,6 +1449,170 @@ Filterable by: status, product, date range, customer, churn risk band.
 | Notifications | Email template customization per event |
 | Reports | Revenue goals, churn thresholds |
 | Advanced | Staging domains, gateway meta keys, debug mode |
+
+---
+
+## Customer My Account Portal
+
+The customer-facing subscription UI lives inside WooCommerce's My Account area. It is server-rendered PHP using WC templates — **not** the React admin panel. All self-service actions POST via AJAX with a WC nonce.
+
+### Template File Structure
+
+```
+your-theme/woocommerce/           ← theme override root
+    myaccount/
+        purecart-subscriptions.php          ← subscription list
+        purecart-subscription-detail.php    ← single subscription view
+
+plugin: includes/templates/woocommerce/myaccount/
+    purecart-subscriptions.php
+    purecart-subscription-detail.php
+```
+
+Templates are loaded via `wc_get_template( ..., PURECART_TEMPLATE_PATH )` — overridable by placing files in `your-theme/woocommerce/myaccount/`.
+
+---
+
+### Subscriptions List Page (`/my-account/purecart-subscriptions/`)
+
+**URL:** `wc_get_account_endpoint_url( 'purecart-subscriptions' )` (slug configurable in WC settings)
+
+**What's displayed:**
+
+| Column | Content |
+|---|---|
+| Subscription | ID badge + product name |
+| Status | Status badge (active / paused / trialing / past_due / pending_cancel / cancelled / expired) |
+| Amount | Recurring price + billing cycle (e.g., $9.99 / month) |
+| Next Payment | Date or "–" for cancelled/expired |
+| Type badge | Software / SaaS / Membership / Downloads / Course / Service |
+| Actions | View · Manage |
+
+**No subscriptions:** show a "No active subscriptions" message with a link to the shop.
+
+**Filter:** active-only tab vs all subscriptions tab (or dropdown).
+
+---
+
+### Subscription Detail Page (`/my-account/purecart-subscription/{id}/`)
+
+**URL:** `wc_get_account_endpoint_url( 'purecart-subscription' ) . $id`
+
+**Security:** `PC_CustomerPortal` verifies `$subscription->user_id === get_current_user_id()` on every load; redirect to list on mismatch.
+
+#### Section 1 — Overview
+
+| Field | Display |
+|---|---|
+| Subscription ID | `#SUB-XXXXX` |
+| Product | Product name + link to product page |
+| Status | Status badge |
+| Started | Human-readable date |
+| Next Payment | Date or "Access until: {date}" for cancelled-pending |
+| Amount | `$9.99 / month` (or installment progress: `2 of 12 payments`) |
+| Payment Method | Card brand + last 4 + expiry (masked) |
+
+#### Section 2 — Delivery Type Panel (conditional)
+
+Rendered based on `delivery_type`:
+
+| Type | Panel content |
+|---|---|
+| `software` | License key (masked with reveal button) · Active domains: `2/3` · Link to Licenses page |
+| `saas` | Account name · Seats: `18/25` · Link to SaaS account |
+| `membership` | Tier badge (Gold/Silver/Bronze) · Access label · Role: `subscriber` |
+| `download` | Downloads this cycle: `3/10` · Quota resets: next renewal date · Next drip: date |
+| `course` | Enrolled courses list with names · Access until: date |
+| `service` | Next deliverable due: date · Deliverable notes |
+
+#### Section 3 — Payment History (collapsed by default)
+
+Table: Date · Amount · Status (Paid / Failed / Refunded) · Order link.
+Last 5 payments shown; "View all" expands or links to order history.
+
+#### Section 4 — Self-Service Actions
+
+Shown/hidden based on `purecart_sub_allow_*` settings and current subscription status:
+
+| Action | Condition | What it does |
+|---|---|---|
+| **Pause** | `allow_pause = true`, status = active or trialing | Opens duration picker modal → AJAX `purecart_customer_pause` |
+| **Resume** | Status = paused | AJAX `purecart_customer_resume` |
+| **Skip Next Renewal** | `allow_skip = true`, skip limit not reached | Confirm modal → AJAX `purecart_customer_skip` |
+| **Change Payment Method** | Status not cancelled/expired | Redirect to WC `/my-account/payment-methods/` |
+| **Upgrade / Downgrade** | `allow_upgrade = true`, upgrade products configured | Plan picker modal → AJAX `purecart_customer_upgrade` |
+| **Early Renewal** | `allow_early_renewal = true`, status = active | Confirm + redirect to checkout with early-renewal cart |
+| **Cancel** | `allow_cancel = true`, status not already cancelled | 3-step retention modal (see below) |
+| **Resubscribe** | Status = cancelled / expired | Redirect to add-to-cart for original product |
+
+All AJAX actions return JSON `{ success, message, redirect? }` and refresh the page or update status inline.
+
+**Nonce:** every AJAX request includes `wp_nonce_field( 'purecart_customer_action', 'purecart_nonce' )`. Server verifies with `check_ajax_referer( 'purecart_customer_action', 'purecart_nonce' )`.
+
+---
+
+### Customer AJAX Handlers
+
+Registered as `wp_ajax_{action}` (logged-in customers only — never `wp_ajax_nopriv_`):
+
+| Action | Handler | Auth check |
+|---|---|---|
+| `purecart_customer_pause` | `PC_CustomerPortal::ajax_pause` | User owns subscription + allow_pause |
+| `purecart_customer_resume` | `PC_CustomerPortal::ajax_resume` | User owns subscription |
+| `purecart_customer_skip` | `PC_CustomerPortal::ajax_skip` | User owns subscription + allow_skip + skip_limit |
+| `purecart_customer_cancel` | `PC_CustomerPortal::ajax_cancel` | User owns subscription + allow_cancel |
+| `purecart_customer_upgrade` | `PC_CustomerPortal::ajax_upgrade` | User owns subscription + allow_upgrade |
+| `purecart_customer_accept_offer` | `PC_CustomerPortal::ajax_accept_offer` | User owns subscription |
+| `purecart_customer_get_offers` | `PC_CustomerPortal::ajax_get_offers` | User owns subscription |
+
+All handlers call the corresponding `PC_SubscriptionManager` method and return `wp_send_json_success` or `wp_send_json_error`.
+
+---
+
+### Customer 3-Step Cancellation Modal
+
+The cancellation flow matches the admin RetentionFlow but runs client-side in the My Account template:
+
+**Step 1 — Reason selection**
+- AJAX `GET` → `purecart_customer_get_offers` with no reason yet → returns reason list from `_purecart_sub_retention_reasons`
+- Customer selects a reason
+
+**Step 2 — Retention offer**
+- AJAX `GET` → `purecart_customer_get_offers` with `reason` param → returns best matching offer
+- Display offer: discount badge / pause suggestion / skip suggestion / downgrade option / contact link
+- Customer can accept offer (`purecart_customer_accept_offer`) or decline and proceed
+
+**Step 3 — Cancel timing**
+- If offer declined: ask "Cancel now" vs "Cancel at end of period" (pending_cancel)
+- AJAX `POST` → `purecart_customer_cancel` with `{ timing: 'immediate' | 'end_of_period' }`
+
+---
+
+### Early Renewal Checkout Flow
+
+1. Customer clicks "Renew Early"
+2. `PC_CustomerPortal::early_renewal_cart( $subscription_id )` adds a special cart item (early renewal product at subscription price) and redirects to WC checkout
+3. WC checkout processes payment; on `woocommerce_payment_complete` → `PC_SubscriptionManager::complete_early_renewal( $order_id )` → advances `next_payment_at` by one billing interval
+
+---
+
+### My Account Dashboard Widget (optional)
+
+If `purecart_sub_show_dashboard_widget = true` (config option), add a subscription summary card to the WC My Account dashboard:
+
+```php
+add_action( 'woocommerce_account_dashboard', 'PC_CustomerPortal::render_dashboard_widget' );
+```
+
+Shows: count of active subscriptions + next payment date + quick "Manage" link.
+
+---
+
+### Delivery-Type Customer Views
+
+Type-specific content in the delivery panel is always read-only for the customer. Customers cannot change their own tier, reset quotas, or manage LMS enrollment directly — those are admin-only actions exposed via the admin REST API.
+
+Exception: **service/retainer** type optionally shows the deliverable notes to the customer as confirmation of what they will receive that cycle.
 
 ---
 

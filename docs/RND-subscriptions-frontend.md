@@ -3,6 +3,52 @@
 > **Scope:** Admin UI only (`src/app/`). All analysis is based on end-to-end reading of the current
 > React/TypeScript codebase. Cross-references the backend subscription model in `docs/RND-subscriptions.md`.
 
+> **Customer-facing UI is NOT React.** The WooCommerce My Account portal (what customers see at
+> `/my-account/purecart-subscriptions/`) is server-rendered PHP using WC templates. It is fully
+> specified in `docs/RND-subscriptions.md` → **§ Customer My Account Portal**. This document covers
+> only the PureCart wp-admin React panel.
+
+---
+
+## WooCommerce Integration Context (Admin Panel)
+
+The React admin panel is embedded in the WordPress admin via a single `<div id="purecart-root">` mount point rendered by a PHP page hook. It calls the PureCart REST API (`/purecart/v1/`) — **not** the WooCommerce REST API.
+
+Key WooCommerce-specific concerns for the admin React panel:
+
+| Concern | Implementation note |
+|---|---|
+| WP Admin color scheme | React panel uses M3 tokens (not WP admin colors); panel is visually self-contained |
+| Auth / nonce | All REST requests include `X-WP-Nonce` header (value injected via `wp_localize_script` as `purecartConfig.nonce`) |
+| i18n | All user-facing strings use `__( 'text', 'purecart' )` on the PHP side; React uses string constants (no WP i18n in React) |
+| Admin menu | PureCart admin menu registered via `add_menu_page` / `add_submenu_page`; React renders within the page output |
+| Product edit links | Subscription list "Product" column links to `/wp-admin/post.php?post={productId}&action=edit` |
+| Order links | Payment log "Order" links to `/wp-admin/post.php?post={orderId}&action=edit` (or HPOS equivalent) |
+| Customer My Account link | "View Customer Portal" action opens `/my-account/purecart-subscription/{id}/` in a new tab |
+| WC Payment methods page | "Update Card" action links customer to `/my-account/payment-methods/` |
+
+### Injected Config Object
+
+PHP injects a `purecartConfig` global via `wp_localize_script` before the React bundle loads:
+
+```ts
+declare global {
+  interface Window {
+    purecartConfig: {
+      nonce: string;           // wp_create_nonce( 'wp_rest' )
+      restBase: string;        // e.g. 'https://example.com/wp-json/purecart/v1'
+      adminUrl: string;        // e.g. 'https://example.com/wp-admin/'
+      myAccountUrl: string;    // e.g. 'https://example.com/my-account/'
+      currentUser: number;     // get_current_user_id()
+      currency: string;        // get_woocommerce_currency_symbol()
+      dateFormat: string;      // get_option('date_format')
+    };
+  }
+}
+```
+
+This config object must be defined in `src/app/utils/config.ts` and imported wherever REST calls are made.
+
 ---
 
 ## 1. Tech Stack & Constraints
@@ -1339,16 +1385,58 @@ POST /purecart/v1/subscriptions/{id}/cancellation/accept-offer
 body: { offer_type: RetentionOffer['type'], offer_data: object }
 
 // Revenue goals — namespace is /subscriptions/revenue-goals (not /revenue-goals)
-GET  /purecart/v1/subscriptions/revenue-goals
-POST /purecart/v1/subscriptions/revenue-goals
+GET    /purecart/v1/subscriptions/revenue-goals
+POST   /purecart/v1/subscriptions/revenue-goals
 body: { name: string, target_amount: number, start_date: string, end_date: string }
+DELETE /purecart/v1/subscriptions/revenue-goals/{goal_id}
 
-// ── Not yet confirmed in backend RND — verify before implementing ─────────────
-// POST /purecart/v1/subscriptions/{id}/retry-payment   (likely internal Action Scheduler only)
-// POST /purecart/v1/subscriptions/{id}/send-card-update
-// POST /purecart/v1/subscriptions/{id}/request-reauth  (may fire via webhook response)
-// DELETE /purecart/v1/subscriptions/revenue-goals/{id}
+// ── Confirmed admin-only endpoints ───────────────────────────────────────────
+POST /purecart/v1/subscriptions/{id}/retry-payment
+POST /purecart/v1/subscriptions/{id}/send-card-update   // emails customer link to /my-account/payment-methods/
+POST /purecart/v1/subscriptions/{id}/request-reauth     // SCA reauth email
+
+// ── Type-specific admin endpoints ────────────────────────────────────────────
+POST /purecart/v1/subscriptions/{id}/membership/change-tier
+body: { tier: string }
+
+POST /purecart/v1/subscriptions/{id}/membership/sync-role
+
+POST /purecart/v1/subscriptions/{id}/downloads/reset-quota
+
+POST /purecart/v1/subscriptions/{id}/downloads/trigger-drip
+
+POST /purecart/v1/subscriptions/{id}/courses/extend-access
+body: { days: number }
+
+POST /purecart/v1/subscriptions/{id}/courses/revoke
+
+POST /purecart/v1/subscriptions/{id}/service/complete-deliverable
+body: { notes?: string }
+
+POST /purecart/v1/subscriptions/{id}/service/send-invoice
 ```
+
+### WooCommerce URL Helpers (admin panel use)
+
+These WC-generated URLs must be constructed from `purecartConfig` rather than hardcoded:
+
+```ts
+// Product edit link (in subscription table / detail page)
+`${purecartConfig.adminUrl}post.php?post=${productId}&action=edit`
+
+// Order edit link (in payment log)
+`${purecartConfig.adminUrl}post.php?post=${orderId}&action=edit`
+
+// Customer My Account subscription detail (View Portal action)
+`${purecartConfig.myAccountUrl}purecart-subscription/${subscriptionId}/`
+
+// Customer payment methods page (Update Card action)
+`${purecartConfig.myAccountUrl}payment-methods/`
+```
+
+All external WP/WC admin links should open in a new tab (`target="_blank" rel="noopener"`).
+The My Account links are for "View in customer portal" row actions — they link the admin to
+what the customer sees, not for navigation within the React panel.
 
 ---
 
