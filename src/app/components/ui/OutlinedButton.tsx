@@ -1,5 +1,28 @@
+/**
+ * OutlinedButton UI component.
+ *
+ * Renders a Material Design 3 outlined button with a transparent background
+ * and a colored border. Supports primary and danger color variants and a
+ * compact small size mode.
+ *
+ * @file
+ * @since 1.0.0
+ */
 import { M3 } from '../../utils/static-data';
 
+/**
+ * Renders a pill-shaped outlined button following M3 outlined button specs.
+ *
+ * @since 1.0.0
+ *
+ * @param {Object}          props           Component props.
+ * @param {React.ReactNode} props.children  Button label or inner content.
+ * @param {Function}        [props.onClick] Click handler callback.
+ * @param {boolean}         [props.danger]  Applies error color border and text when true.
+ * @param {boolean}         [props.small]   Renders a compact size variant when true.
+ *
+ * @return {JSX.Element} A styled outlined button element.
+ */
 export function OutlinedButton( {
 	children,
 	onClick,

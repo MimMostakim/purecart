@@ -1,5 +1,27 @@
+/**
+ * TonalButton UI component.
+ *
+ * Renders a Material Design 3 filled tonal button using the secondary
+ * container color. Intended for medium-emphasis actions that sit below
+ * a primary filled button in visual hierarchy.
+ *
+ * @file
+ * @since 1.0.0
+ */
 import { M3 } from '../../utils/static-data';
 
+/**
+ * Renders a pill-shaped filled tonal button following M3 tonal button specs.
+ *
+ * @since 1.0.0
+ *
+ * @param {Object}          props           Component props.
+ * @param {React.ReactNode} props.children  Button label or inner content.
+ * @param {Function}        [props.onClick] Click handler callback.
+ * @param {boolean}         [props.small]   Renders a compact size variant when true.
+ *
+ * @return {JSX.Element} A styled tonal button element.
+ */
 export function TonalButton( {
 	children,
 	onClick,

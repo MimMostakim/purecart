@@ -1,7 +1,33 @@
+/**
+ * FilterChip UI component.
+ *
+ * Renders an M3-style filter chip that opens a dropdown of selectable options.
+ * Displays the active value inline and provides a clear (×) control when a
+ * non-default option is selected.
+ *
+ * @file
+ * @since 1.0.0
+ */
 import { useState } from 'react';
 import { Filter, ChevronDown, Check } from 'lucide-react';
 import { M3 } from '../../utils/static-data';
 
+/**
+ * Renders a filter chip button with a dropdown option list.
+ *
+ * The chip is considered active when value differs from 'All'. Selecting 'All'
+ * resets the chip to its inactive state.
+ *
+ * @since 1.0.0
+ *
+ * @param {Object}   props           Component props.
+ * @param {string}   props.label     Category label displayed when no value is selected.
+ * @param {string}   props.value     Currently selected option value.
+ * @param {string[]} props.options   Selectable option values (excluding the implicit 'All' entry).
+ * @param {Function} props.onChange  Callback invoked with the newly selected option string.
+ *
+ * @return {JSX.Element} The filter chip trigger and dropdown overlay.
+ */
 export function FilterChip( {
 	label,
 	value,

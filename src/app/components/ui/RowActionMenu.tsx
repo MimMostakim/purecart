@@ -1,3 +1,14 @@
+/**
+ * RowActionMenu UI component.
+ *
+ * Renders a context-aware three-dot action menu for a license table row.
+ * Builds the action list dynamically based on the row's current status,
+ * showing suspend/reinstate as appropriate and disabling actions that do
+ * not apply to revoked or expired licenses.
+ *
+ * @file
+ * @since 1.0.0
+ */
 import {
 	MoreVertical,
 	FileText,
@@ -13,6 +24,19 @@ import {
 } from 'lucide-react';
 import { M3, licensesTableData } from '../../utils/static-data';
 
+/**
+ * Describes a single action rendered inside the row action menu.
+ *
+ * @since 1.0.0
+ *
+ * @typedef  {Object}            MenuAction
+ * @property {string}            label          Display label for the action.
+ * @property {React.ElementType} icon           Lucide icon component rendered beside the label.
+ * @property {boolean}           [danger]       Applies error color styling when true.
+ * @property {boolean}           [dividerBefore] Renders a separator above this item when true.
+ * @property {Function}          onClick        Callback invoked when the item is selected.
+ * @property {boolean}           [disabled]     Prevents the action from firing when true.
+ */
 export interface MenuAction {
 	label: string;
 	icon: React.ElementType;
@@ -22,6 +46,27 @@ export interface MenuAction {
 	disabled?: boolean;
 }
 
+/**
+ * Props for the RowActionMenu component.
+ *
+ * @since 1.0.0
+ *
+ * @typedef  {Object}   RowMenuProps
+ * @property {Object}   row                  License row data used to determine available actions.
+ * @property {boolean}  open                 Controls whether the dropdown is visible.
+ * @property {Function} onOpen               Callback to open the menu.
+ * @property {Function} onClose              Callback to close the menu.
+ * @property {Function} onViewDetail         Navigates to the license detail page.
+ * @property {Function} onViewCustomer       Navigates to the customer detail page.
+ * @property {Function} onCopyKey            Copies the license key to the clipboard.
+ * @property {Function} onExtendExpiry       Opens the extend-expiry dialog.
+ * @property {Function} onResetActivations   Resets domain activation count to zero.
+ * @property {Function} onSendReminder       Sends a reminder email to the customer.
+ * @property {Function} onSuspend            Suspends the license.
+ * @property {Function} onReinstate          Reinstates a suspended license.
+ * @property {Function} onRevoke             Permanently revokes the license.
+ * @property {Function} onDuplicate          Duplicates the license record.
+ */
 export interface RowMenuProps {
 	row: ( typeof licensesTableData )[ 0 ];
 	open: boolean;
@@ -39,6 +84,19 @@ export interface RowMenuProps {
 	onDuplicate: () => void;
 }
 
+/**
+ * Renders a context-aware three-dot action menu for a license table row.
+ *
+ * Builds the action list dynamically based on the row status. Suspend is shown
+ * for active licenses; Reinstate is shown for suspended ones. Revoke and
+ * Reset Activations are disabled for revoked rows.
+ *
+ * @since 1.0.0
+ *
+ * @param {RowMenuProps} props Component props.
+ *
+ * @return {JSX.Element} The menu trigger button and floating action list.
+ */
 export function RowActionMenu( {
 	row,
 	open,

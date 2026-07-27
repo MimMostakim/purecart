@@ -1,5 +1,26 @@
+/**
+ * IconButton UI component.
+ *
+ * Renders a circular icon-only button with a hover state background fill.
+ * Intended for toolbar and top-bar icon actions.
+ *
+ * @file
+ * @since 1.0.0
+ */
 import { M3 } from '../../utils/static-data';
 
+/**
+ * Renders a circular button containing a single Lucide icon.
+ *
+ * @since 1.0.0
+ *
+ * @param {Object}           props          Component props.
+ * @param {React.ElementType} props.icon    Lucide icon component to render inside the button.
+ * @param {Function}         [props.onClick] Click handler callback.
+ * @param {string}           [props.title]  Tooltip text exposed via the native title attribute.
+ *
+ * @return {JSX.Element} A circular icon button element.
+ */
 export function IconButton( {
 	icon: Icon,
 	onClick,

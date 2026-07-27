@@ -1,9 +1,38 @@
+/**
+ * StatCard UI component.
+ *
+ * Renders a large statistic card with an icon, numeric value, descriptive label,
+ * trend chip, and an optional hover-revealed action dropdown. Supports a warning
+ * variant that adds a colored left border.
+ *
+ * @file
+ * @since 1.0.0
+ */
 import { M3 } from '../../utils/static-data';
 import { Card } from './Card';
 import { ActionDropdown } from './ActionDropdown';
 import type { ActionItem } from './ActionDropdown';
 import { TrendChip } from './TrendChip';
 
+/**
+ * Renders a statistic card with icon, value, label, trend chip, and optional actions.
+ *
+ * The action dropdown is hidden by default and revealed on card hover. When
+ * warning is true, the card renders with a warning-colored left border and icon.
+ *
+ * @since 1.0.0
+ *
+ * @param {Object}           props             Component props.
+ * @param {React.ElementType} props.icon       Lucide icon component rendered in the card header.
+ * @param {string}           props.label       Descriptive label displayed below the value.
+ * @param {string}           props.value       Formatted metric value displayed prominently.
+ * @param {string}           props.trend       Trend string shown in the trend chip.
+ * @param {boolean}          props.trendUp     Determines positive or negative trend chip styling.
+ * @param {boolean}          [props.warning]   Applies warning color accent to the card when true.
+ * @param {ActionItem[]}     [props.actions]   List of action items shown in the hover dropdown.
+ *
+ * @return {JSX.Element} A styled statistic card element.
+ */
 export function StatCard( {
 	icon: Icon,
 	label,

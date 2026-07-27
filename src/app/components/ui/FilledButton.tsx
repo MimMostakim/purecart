@@ -1,5 +1,27 @@
+/**
+ * FilledButton UI component.
+ *
+ * Renders a Material Design 3 filled button with primary or error color variants.
+ * Supports standard and small size modes.
+ *
+ * @file
+ * @since 1.0.0
+ */
 import { M3 } from '../../utils/static-data';
 
+/**
+ * Renders a full-background pill-shaped button following M3 filled button specs.
+ *
+ * @since 1.0.0
+ *
+ * @param {Object}          props           Component props.
+ * @param {React.ReactNode} props.children  Button label or inner content.
+ * @param {Function}        [props.onClick] Click handler callback.
+ * @param {boolean}         [props.danger]  Renders the button with error color when true.
+ * @param {boolean}         [props.small]   Renders a compact size variant when true.
+ *
+ * @return {JSX.Element} A styled filled button element.
+ */
 export function FilledButton( {
 	children,
 	onClick,

@@ -1,5 +1,28 @@
+/**
+ * SettingsSelectField UI component.
+ *
+ * Renders a labeled native select dropdown row for use in settings panels.
+ * Displays an optional description below the label and aligns the select
+ * to the right at a fixed width.
+ *
+ * @file
+ * @since 1.0.0
+ */
 import { M3 } from '../../utils/static-data';
 
+/**
+ * Renders a settings row containing a label, optional description, and select dropdown.
+ *
+ * @since 1.0.0
+ *
+ * @param {Object}   props               Component props.
+ * @param {string}   props.label         Field label displayed to the left of the select.
+ * @param {string}   [props.desc]        Optional helper text displayed below the label.
+ * @param {string[]} props.options        Array of option strings to populate the select.
+ * @param {string}   [props.defaultValue] Pre-selected option value for the uncontrolled select.
+ *
+ * @return {JSX.Element} A two-column settings row with label and select dropdown.
+ */
 export function SettingsSelectField( {
 	label,
 	desc,

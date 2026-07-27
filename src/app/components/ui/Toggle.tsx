@@ -1,5 +1,25 @@
+/**
+ * Toggle UI component.
+ *
+ * Renders a Material Design 3 switch toggle button. The track color and
+ * thumb size animate between on and off states via inline style transitions.
+ *
+ * @file
+ * @since 1.0.0
+ */
 import { M3 } from '../../utils/static-data';
 
+/**
+ * Renders an animated on/off toggle switch following M3 switch specs.
+ *
+ * @since 1.0.0
+ *
+ * @param {Object}   props          Component props.
+ * @param {boolean}  props.on       Current toggle state. True renders the active/on state.
+ * @param {Function} props.onChange Callback invoked with the new boolean state when toggled.
+ *
+ * @return {JSX.Element} A styled toggle switch button element.
+ */
 export function Toggle( {
 	on,
 	onChange,
