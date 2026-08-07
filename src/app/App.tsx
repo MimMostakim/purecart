@@ -1,16 +1,18 @@
 import { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { M3 } from './utils/static-data';
 import type { Page } from './utils/static-data';
 import { Sidebar, TopBar } from './components/ui';
-import {
-	SubscriptionsPage,
-	SubscriptionAnalyticsPage,
-} from './components/Subscriptions';
+import { AppRoutes, PAGE_PATHS, getPageFromPath } from './router';
 
 // ─── Root App ──────────────────────────────────────────────────────────────────
 export default function App() {
-	const [ page, setPage ] = useState< Page >( 'subscriptions' );
 	const [ collapsed, setCollapsed ] = useState( false );
+	const location = useLocation();
+	const navigate = useNavigate();
+
+	const page: Page = getPageFromPath( location.pathname );
+	const goToPage = ( p: Page ) => navigate( PAGE_PATHS[ p ] );
 
 	return (
 		<div
@@ -22,24 +24,19 @@ export default function App() {
 		>
 			<Sidebar
 				activePage={ page }
-				onNav={ setPage }
+				onNav={ goToPage }
 				collapsed={ collapsed }
 				onToggle={ () => setCollapsed( ( c ) => ! c ) }
 			/>
 
 			<div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-				<TopBar page={ page } onNav={ setPage } />
+				<TopBar page={ page } onNav={ goToPage } />
 
 				<main
 					className="flex-1 overflow-y-auto"
 					style={ { padding: 24 } }
 				>
-					{ page === 'subscriptions' && <SubscriptionsPage /> }
-					{ page === 'subscription-analytics' && (
-						<SubscriptionAnalyticsPage
-							onBack={ () => setPage( 'subscriptions' ) }
-						/>
-					) }
+					<AppRoutes />
 				</main>
 			</div>
 		</div>
