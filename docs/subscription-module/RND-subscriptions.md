@@ -1,0 +1,1812 @@
+# RND — Subscription Module
+**Plugin:** PureCart
+**Module:** Subscriptions
+**Phase:** 2
+**Standalone:** Yes — works independently; links to Licensing and SaaS modules when both are active
+**Third-party dependency:** None — fully built-in
+**Last R&D update:** 2026-07-26 (end-to-end analysis of 7 competitor plugins)
+
+---
+
+## Competitor Plugins Analyzed (End-to-End)
+
+| Plugin | Type | Approach | Key Differentiators |
+|---|---|---|---|
+| **Easy Digital Downloads (EDD)** | Full platform | Custom orders + CPT | Customer-centric model, licensing add-on, bundles, download logs |
+| **ArraySubs** | WooCommerce subscription | PSR-4, feature-providers | Retention flow, plan switching with proration, card expiry, SCA reauth |
+| **Paid Member Subscriptions (PMS)** | Membership | Custom CPT | Grace period, payment retry, plan upgrade/downgrade with sign-up fee |
+| **Subscriptions for WooCommerce (WP Swings)** | WooCommerce subscription | CPT-based | Basic free tier, membership system with content restriction |
+| **Milo Subscriptions** | WooCommerce subscription | Custom order type (HPOS) | Gateway-scheduled payment detection, idempotency guard, staging block, zero-total renewals, external renewal recording |
+| **YITH WooCommerce Subscription** | WooCommerce subscription | CPT-based | PayPal billing agreements, hourly renewal cron, pending/trash cleanup |
+| **Recurio** | WooCommerce subscription | Custom table | Split/installment payments, subscribe-&-save, churn score, customer LTV, revenue goals, early renewal, access timing |
+
+---
+
+## Overview
+
+The Subscriptions module is a complete, self-contained recurring billing management system built directly into PureCart. It adds a subscription product type to WooCommerce, handles recurring billing via Stripe and PayPal (through WooCommerce's gateway layer), manages the full subscription lifecycle (trial → active → paused → cancelled → expired), and ties renewals directly to license expiry and SaaS account status when those modules are enabled.
+
+This is not a billing layer wrapper — it is a full subscription engine.
+
+---
+
+## Standalone Usage
+
+Enable this module in **Settings → PureCart → Modules → Subscriptions**.
+
+Without any other PureCart module:
+- Create subscription products with recurring pricing, free trials, sign-up fees
+- Auto-renew via Stripe or PayPal
+- Customer self-service: pause, resume, cancel, skip, change payment method, upgrade/downgrade
+- Admin: manage all subscriptions, trigger manual renewals, bulk actions
+- Dunning: configurable retry and email sequence on payment failure
+- Reports: active/expired/cancelled counts, MRR, LTV, churn score, CSV export
+
+With **Licensing** enabled: renewal automatically extends license expiry.
+With **SaaS** enabled: renewal re-activates suspended SaaS account; cancellation suspends it.
+
+---
+
+## Feature Specification
+
+### 1. Subscription Product Types
+
+| Feature | Description | Developer Notes |
+|---|---|---|
+| Subscription product type | Admin creates `purecart_subscription` product in WooCommerce | Register via `woocommerce_product_class` + product meta boxes |
+| Recurring price | Recurring billing amount | `_purecart_sub_price` |
+| Billing interval | Daily / Weekly / Monthly / Yearly | `_purecart_sub_interval` + `_purecart_sub_period` |
+| Free trial | Optional free trial period before first billing | `_purecart_sub_trial_length` + `_purecart_sub_trial_period` |
+| Sign-up fee | Optional one-time fee collected on first payment | `_purecart_sub_signup_fee` |
+| Subscription length | Max duration (e.g., 12 months); empty = indefinite | `_purecart_sub_length` |
+| Variable subscriptions | Product variations with different prices/intervals | WC variable product + per-variation override meta |
+| Mixed cart | Subscription + non-subscription products in one checkout | WC cart compatibility required |
+| Multiple subscriptions | Multiple subscription products in one checkout | Separate subscription record per item |
+| Subscription coupons | Sign-up fee coupon + recurring fee coupon types | Custom WC coupon discount types |
+| **Subscribe & Save** | Recurring subscription price is discounted vs. one-time purchase | `_purecart_sub_discount_type` + `_purecart_sub_discount_value`; show both prices on product page (inspired by Recurio) |
+| **Split payments** | Pay a product in N installments; access granted immediately or after final payment | `_purecart_payment_type` = `split`, `_purecart_max_payments`; each installment = product price / N (inspired by Recurio) |
+| Drip content | Deliver downloadable files incrementally over time | Phase 4 — requires Downloads module |
+
+---
+
+### 2. Subscription Management (Customer)
+
+| Feature | Description |
+|---|---|
+| My Account subscriptions tab | Customer views all active/past subscriptions |
+| Pause subscription | Customer pauses (vacation mode); billing suspended, access maintained; `next_payment_at` advances by pause duration on resume |
+| Resume subscription | Resume from paused state; new `next_payment_at` calculated from resume date |
+| Skip next renewal | Customer skips one upcoming renewal; `next_payment_at` jumps one interval; license/SaaS access extends to cover the skipped cycle; `skip_count` incremented |
+| **Pending cancellation** | Customer cancels at end of period; status = `pending_cancel`; access continues; when renewal Action Scheduler fires, finalize cancellation instead of charging (inspired by Milo) |
+| Cancel immediately | Status → `cancelled`; cancel scheduled renewal; run retention flow first |
+| Change payment method | Customer updates card/PayPal for future renewals |
+| Upgrade plan | Switch to higher-tier; 3 proration modes |
+| Downgrade plan | Switch to lower-tier; 3 proration modes; effective at renewal or immediately |
+| Auto-downgrade | Schedule a downgrade for next renewal as a retention offer; email confirmation sent |
+| Resubscribe | Re-activate a cancelled or expired subscription |
+| Update quantity | Change subscription quantity (if product allows) |
+| View renewal history | Full log of payments, status changes, retries, emails |
+| **Early renewal** | Customer renews before the due date; extends `next_payment_at` by one cycle; new renewal order created and charged immediately (inspired by Recurio) |
+
+---
+
+### 3. Admin Features
+
+| Feature | Description |
+|---|---|
+| Admin subscription list | Sortable WP_List_Table of all subscriptions |
+| Filter subscriptions | Filter by status, product, customer, date range |
+| Subscription detail page | View all details, payment log, status history |
+| Manual status change | Admin changes status with reason; hook fires |
+| Manual renewal trigger | Admin forces renewal from detail page |
+| Manual cancellation | Admin cancels with optional grace period |
+| Bulk actions | Bulk cancel, bulk retry payment, bulk export |
+| Overdue/suspend period | Configurable days before overdue → suspended |
+| Payment retry settings | Number of retries and intervals (configurable) |
+| Renewal reminder emails | Multiple pre-renewal reminders (configurable days before) |
+| Tax in renewal | Include or exclude tax in renewal orders |
+| Shipping in renewal | Snapshot shipping method + amount from original order; include or exclude in renewals |
+| Subscription logs | Per-subscription log of all events (payment attempt, status change, email sent) |
+| **Churn risk score** | Score computed from payment failure history, tenure, recency; surfaced in list table |
+| **Customer LTV** | Estimated lifetime value stored on record (billing_amount × 24-month projection) |
+| **Revenue goals** | Admin sets revenue targets per period; updated automatically on each payment |
+| **Health check scanner** | Scan for subscriptions with expired/missing payment methods; surface for admin action (inspired by Milo) |
+| **Privacy/GDPR** | Data export (personal data exporter) + data eraser hooks for WP personal data tools |
+
+---
+
+### 4. Renewal Methods
+
+| Method | Requirement |
+|---|---|
+| Auto-renewal via Stripe | WooCommerce Stripe Gateway active |
+| Auto-renewal via PayPal | WooCommerce PayPal Payments active |
+| Auto-renewal via PayPal Subscriptions | PayPal billing agreements API |
+| **Gateway-scheduled payments** | Some gateways (e.g. WooPayments, Stripe Billing) manage their own billing schedule; PureCart detects the `gateway_scheduled_payments` capability and skips creating its own renewal; gateway webhook calls `RenewalEngine::record_external_renewal()` to sync PureCart's schedule (inspired by Milo) |
+| Manual renewal | Customer pays renewal invoice manually via any WC gateway |
+| Fallback to manual | If auto-renewal fails or gateway is disconnected, subscription switches to manual mode |
+
+**Gateway meta key transfer:** When creating a renewal order, PureCart copies gateway-specific meta keys from the subscription to the renewal order so gateways can process off-session charges. Keys copied (filterable via `purecart_gateway_meta_keys`):
+
+```php
+// Default set — extend via filter
+[
+    '_stripe_customer_id',
+    '_stripe_source_id',
+    '_stripe_card_id',
+    '_stripe_upe_payment_type',
+    '_paypal_subscription_id',
+    '_ppcp_billing_agreement_id',
+]
+```
+
+---
+
+### 5. Renewal Engine — Idempotency & Safety
+
+These patterns prevent double-charging and runaway renewals (inspired by Milo):
+
+**Idempotency guard:** Before creating a renewal order, `RenewalEngine` checks `_purecart_current_renewal_order_id` on the subscription. If a renewal order already exists for this cycle:
+- If it is paid → skip (already charged this cycle).
+- If it is unpaid → retry payment on the same order, not a new one.
+
+After successful payment, `_purecart_current_renewal_order_id` is cleared so the next cycle creates a fresh order.
+
+**Zero-total renewal:** If renewal order total ≤ 0 (fully discounted or $0 subscription), call `payment_complete()` immediately without routing to a gateway. Advances schedule, fires all renewal hooks, sends "renewal successful" email.
+
+**Staging site block:** A filter allows blocking renewals on staging/development sites:
+```php
+apply_filters( 'purecart_process_renewal', true, $subscription_id )
+// Return false on staging to prevent billing
+```
+
+**Pending-cancel handling:** When `process_renewal` fires for a `pending_cancel` subscription, finalize the cancellation instead of charging:
+```php
+if ( $subscription->has_status( 'pending_cancel' ) ) {
+    SubscriptionManager::finalize_cancellation( $subscription_id,
+        'Prepaid period ended; cancellation finalized.' );
+    return;
+}
+```
+
+---
+
+### 6. Notifications (Email)
+
+All emails use WooCommerce's HTML email infrastructure. Templates overridable in `your-theme/woocommerce/emails/`.
+
+| Email | Trigger | Customizable |
+|---|---|---|
+| Subscription created | Order completed with subscription product | Yes |
+| Trial started | Subscription enters `trialing` status | Yes |
+| Trial ending soon | N days before trial ends (configurable) | Yes |
+| Trial converted | Trial period ends, first billing collected | Yes |
+| Renewal reminder | N days before renewal (configurable; multiple reminders) | Yes |
+| Renewal invoice | Renewal order created (manual renewal path) | Yes |
+| Renewal successful | Payment captured | Yes |
+| Payment failed | Auto-renewal charge fails | Yes |
+| Payment retry scheduled | Dunning retry queued | Yes |
+| Overdue notice | Payment still outstanding — active grace period | Yes |
+| Suspend notice | Subscription suspended after active grace days | Yes |
+| Suspended grace ending | N days before hard cancel during suspended grace | Yes |
+| Cancellation notice | Customer or admin cancels | Yes |
+| Pending cancellation | Cancel-at-end-of-period confirmed | Yes |
+| Expiration notice | Fixed-length subscription reaches end | Yes |
+| Resubscription confirmed | Customer resubscribes | Yes |
+| Plan changed | Upgrade or downgrade applied | Yes |
+| Auto-downgrade scheduled | Downgrade scheduled for next renewal as retention offer | Yes |
+| Skip renewal confirmed | Customer skips next billing cycle | Yes |
+| **Card expiring soon** | Customer's stored payment card expires within N days (configurable; default 30) | Yes |
+| **Payment reauthorization** | SCA/3DS reauthorization required for off-session charge; customer must re-authenticate | Yes |
+| **Retention discount accepted** | Customer accepted a retention discount offer | Yes |
+| Early renewal completed | Customer renewed early | Yes |
+| Split payment installment | Each installment paid (split payment products) | Yes |
+| Split payment completed | All installments paid; access fully granted | Yes |
+
+All email templates support 50+ placeholders: `{first_name}`, `{subscription_id}`, `{product_name}`, `{amount}`, `{next_payment_date}`, `{trial_end_date}`, `{cancel_date}`, `{license_key}`, `{plan_name}`, `{churn_risk}`, `{installment_number}`, `{installments_remaining}`, and more.
+
+Multiple pre-renewal reminders can be configured (e.g., 7 days before, 3 days before, 1 day before).
+
+---
+
+### 7. Retention Flow (Cancellation)
+
+When a customer initiates cancellation, a retention flow intercepts before the subscription is cancelled.
+
+```
+Customer clicks "Cancel"
+    │
+    ├── Step 1: Cancellation reason selection (admin-configurable list)
+    │       Examples: "Too expensive", "Not using it", "Missing features",
+    │                 "Switching provider", "Pausing use", "Other"
+    │
+    └── Step 2: Retention offer (matched to reason — configurable per reason)
+            ├── Offer A: Discount     → X% or $X off next N renewals
+            ├── Offer B: Pause        → Pause for N days instead of cancelling
+            ├── Offer C: Skip cycle   → Skip next billing charge (free extension)
+            ├── Offer D: Downgrade    → Switch to a lower-tier plan (schedule for next renewal)
+            └── Offer E: Contact      → Redirect to support URL
+                │
+                ├── Customer accepts → Apply offer, abort cancel, log retention event
+                └── Customer declines → Confirm cancellation (immediate or end-of-period)
+```
+
+#### Retention Offer Eligibility Rules
+
+Each offer can be filtered by (inspired by ArraySubs):
+
+| Rule | Description |
+|---|---|
+| `trigger_reasons` | Array of reason keys that trigger this offer; empty = show for all reasons |
+| `min_subscription_age_days` | Minimum days since subscription start (e.g., only offer to customers who've paid at least once) |
+| `min_subscription_value` | Minimum recurring price threshold |
+| `max_subscription_value` | Maximum recurring price threshold |
+| `min_user_total_value` | Minimum lifetime WooCommerce spend by customer |
+| `max_user_total_value` | Maximum lifetime spend |
+| `min_remaining_days` | Minimum days remaining in current billing period |
+| `max_remaining_days` | Maximum days remaining |
+| `product_ids` | Restrict offer to specific product IDs |
+| One-time-use guard | Discount offers track `_purecart_retention_discount_applied_date`; once used, the same offer is not shown again for this subscription |
+
+#### Retention Offer History
+
+Each accepted offer is appended to `_purecart_retention_offer_history` (JSON array) on the subscription, allowing admin reports to show offer acceptance rates and types.
+
+#### Retention Data (Product Meta)
+
+| Meta Key | Description |
+|---|---|
+| `_purecart_sub_retention_enabled` | bool — enable retention flow |
+| `_purecart_sub_retention_reasons` | JSON array of reason labels |
+| `_purecart_sub_retention_offers` | JSON array of offer configs per reason |
+
+#### REST Endpoints (Retention)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/purecart/v1/subscriptions/{id}/cancellation/reasons` | List cancellation reasons |
+| `GET` | `/purecart/v1/subscriptions/{id}/cancellation/offers` | List available retention offers |
+| `POST` | `/purecart/v1/subscriptions/{id}/cancellation/accept-offer` | Accept a retention offer |
+| `POST` | `/purecart/v1/subscriptions/{id}/cancel` | Confirm cancellation (immediate or end-of-period) |
+
+---
+
+### 8. Plan Upgrade / Downgrade with Proration
+
+Three proration modes configurable per product and globally:
+
+| Mode | Behaviour |
+|---|---|
+| `prorate_immediately` | Calculate unused credit, charge/refund difference now; reset cycle from today |
+| `apply_at_renewal` | No charge today; new price takes effect at next renewal; cycle date unchanged |
+| `no_proration` | Switch product immediately; customer pays new full price at next renewal; no credit |
+
+**Default:** `apply_at_renewal`.
+
+```
+Customer upgrades from Plan A ($49/mo) to Plan B ($99/mo)
+    │
+    └── PlanUpgrade::process($subscription_id, $new_product_id, $mode)
+            ├── days_remaining = (next_payment_at − NOW())
+            ├── unused_credit = (days_remaining / days_in_cycle) × $49
+            ├── prorated_charge = $99 − unused_credit
+            ├── Create WC order for prorated_charge
+            ├── Charge via stored gateway token
+            ├── UPDATE wp_purecart_subscriptions { product_id, recurring_amount = $99 }
+            └── [Licensing] Update plan_type and activation_limit
+                [SaaS] Trigger plan-change webhook event
+
+Downgrade: same logic; issue store credit for difference instead of charging.
+```
+
+#### Downgrade as Retention Offer
+
+When a downgrade is offered via the retention flow, it is scheduled for the next renewal using `_purecart_sub_pending_switch` meta. The switch is applied when the next renewal order is created. An "auto-downgrade scheduled" email is sent immediately.
+
+---
+
+### 9. Reports
+
+| Report | Description |
+|---|---|
+| Active subscriptions | Count by product, MRR breakdown |
+| Expired subscriptions | Count and revenue lost |
+| Cancelled subscriptions | Count, churn rate, top cancellation reasons |
+| Trial to paid conversion | % of trials that converted |
+| Revenue report | Total billed per period; MRR / ARR |
+| **Churn risk summary** | Distribution of subscriptions by churn risk score |
+| **Customer LTV** | Average LTV across active subscriptions |
+| **Revenue goals** | Progress against admin-defined revenue targets |
+| **Retention report** | Cancellation reason breakdown, offer acceptance rate, retention revenue saved |
+| **Split payment progress** | Installments paid vs. remaining per subscription |
+| Export to CSV | All subscription data including customer info, billing amounts, dates |
+
+---
+
+## Architecture
+
+### Classes
+
+| Class | File | Responsibility |
+|---|---|---|
+| `SubscriptionProduct` | `includes/Subscriptions/SubscriptionProduct.php` | Register product type, meta boxes, pricing display, subscribe & save |
+| `SubscriptionManager` | `includes/Subscriptions/SubscriptionManager.php` | Create, renew, pause, cancel, skip, resubscribe, early renewal |
+| `RenewalEngine` | `includes/Subscriptions/RenewalEngine.php` | Action Scheduler jobs; idempotency guard; zero-total; staging block; external renewal recording |
+| `DunningManager` | `includes/Subscriptions/DunningManager.php` | 2-phase failed payment retry + emails |
+| `PlanUpgrade` | `includes/Subscriptions/PlanUpgrade.php` | 3-mode proration, upgrade/downgrade, pending switch |
+| `RetentionFlow` | `includes/Subscriptions/RetentionFlow.php` | Cancellation reason + offer eligibility + offer acceptance + history |
+| `SplitPaymentManager` | `includes/Subscriptions/SplitPaymentManager.php` | Installment tracking, access timing, completion detection |
+| `RenewalSync` | `includes/Subscriptions/RenewalSync.php` | Calendar-date alignment for first partial payment |
+| `RoleManager` | `includes/Subscriptions/RoleManager.php` | WP role assignment on status transitions |
+| `ChurnScorer` | `includes/Subscriptions/ChurnScorer.php` | Compute and update churn risk score on payment events |
+| `HealthCheck` | `includes/Subscriptions/HealthCheck.php` | Scan for expired/missing payment methods; admin notices |
+| `SubscriptionEmail` | `includes/Subscriptions/SubscriptionEmail.php` | All subscription email classes (25 types) |
+| `SubscriptionReport` | `includes/Subscriptions/SubscriptionReport.php` | Admin reports and CSV export |
+| `SubscriptionListTable` | `includes/Admin/SubscriptionListTable.php` | WP_List_Table implementation |
+| `PrivacyHandler` | `includes/Subscriptions/PrivacyHandler.php` | GDPR data export + erase integration |
+| `CustomerPortal` | `includes/Subscriptions/CustomerPortal.php` | My Account endpoint registration, AJAX handlers, customer self-service actions |
+| `DeliveryManager` | `includes/Subscriptions/DeliveryManager.php` | Dispatches provisioning for all 6 delivery types on lifecycle events |
+
+---
+
+## WooCommerce Integration
+
+This section specifies every WooCommerce hook, filter, and compatibility point that PureCart's subscription module must implement. These are WC-defined contracts — missing any one of them causes checkout failures, My Account breakage, or payment processing errors.
+
+---
+
+### Product Type Registration
+
+```php
+// Register the custom product type class
+add_filter( 'woocommerce_product_class', function( $classname, $product_type ) {
+    if ( 'purecart_subscription' === $product_type ) {
+        return 'PC_Product_Subscription';
+    }
+    return $classname;
+}, 10, 2 );
+
+// Register the product type so it appears in the product type dropdown
+add_filter( 'product_type_selector', function( $types ) {
+    $types['purecart_subscription'] = __( 'Subscription', 'purecart' );
+    return $types;
+} );
+```
+
+`PC_Product_Subscription extends WC_Product` — must override:
+- `get_type()` → `'purecart_subscription'`
+- `is_purchasable()` — return `false` if subscription limit reached for this customer
+- `add_to_cart_url()` — return standard add-to-cart URL; handled by WC checkout
+- `supports( $feature )` — declare support for `'subscriptions'` feature string
+
+**Variable subscription support:** for product type `'purecart_variable_subscription'`, extend `WC_Product_Variable`. Each variation stores its own `_purecart_sub_price`, `_purecart_sub_interval`, `_purecart_sub_period`.
+
+**Product data tabs (admin edit screen):**
+```php
+add_filter( 'woocommerce_product_data_tabs', function( $tabs ) {
+    $tabs['purecart_subscription'] = [
+        'label'    => __( 'Subscription', 'purecart' ),
+        'target'   => 'purecart_subscription_options',
+        'class'    => [ 'show_if_purecart_subscription', 'show_if_purecart_variable_subscription' ],
+        'priority' => 11,
+    ];
+    return $tabs;
+} );
+
+add_action( 'woocommerce_product_data_panels', 'PC_SubscriptionProduct::render_options_panel' );
+add_action( 'woocommerce_process_product_meta', 'PC_SubscriptionProduct::save_product_meta' );
+add_action( 'woocommerce_save_product_variation', 'PC_SubscriptionProduct::save_variation_meta', 10, 2 );
+```
+
+---
+
+### Checkout Integration
+
+```php
+// Create subscription when initial order is completed
+add_action( 'woocommerce_payment_complete', 'PC_SubscriptionManager::maybe_create_from_order' );
+add_action( 'woocommerce_order_status_processing', 'PC_SubscriptionManager::maybe_create_from_order' );
+
+// Display subscription details in checkout order summary
+add_filter( 'woocommerce_get_item_data', 'PC_SubscriptionProduct::display_item_data', 10, 2 );
+
+// Modify totals display: show recurring amount + trial note
+add_filter( 'woocommerce_cart_totals_order_total_html', 'PC_SubscriptionProduct::cart_total_html' );
+
+// Override needs_payment for $0 trial checkout
+add_filter( 'woocommerce_cart_needs_payment', 'PC_SubscriptionProduct::cart_needs_payment' );
+
+// Block mixed subscription + subscription cart (configurable)
+add_filter( 'woocommerce_add_to_cart_validation', 'PC_SubscriptionProduct::validate_add_to_cart', 10, 3 );
+
+// Subscription checkout field: payment method must support tokenization
+add_filter( 'woocommerce_available_payment_gateways', 'PC_SubscriptionProduct::filter_gateways_for_subscriptions' );
+```
+
+`filter_gateways_for_subscriptions` removes any gateway that does not support `'tokenization'` or `'subscriptions'` when the cart contains a subscription product.
+
+---
+
+### HPOS Compatibility Declaration
+
+Must be declared on `before_woocommerce_init`:
+
+```php
+add_action( 'before_woocommerce_init', function() {
+    if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility(
+            'custom_order_tables',
+            PURECART_FILE,
+            true
+        );
+    }
+} );
+```
+
+Renewal orders are standard WooCommerce orders created via `wc_create_order()`. They carry order meta `_purecart_renewal_for` (subscription ID) and `_purecart_renewal_order` = `'yes'` to distinguish them from initial orders. All order reads/writes use `wc_get_order()` — never direct `get_post()`.
+
+---
+
+### WooCommerce Blocks Compatibility
+
+```php
+add_action( 'before_woocommerce_init', function() {
+    if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility(
+            'cart_checkout_blocks',
+            PURECART_FILE,
+            true   // Phase 1: compatible but no block-specific extensions yet
+        );
+    }
+} );
+```
+
+Phase 1 declares compatibility so WC does not show admin warnings. Block-specific integrations (registering `IntegrationInterface`) are Phase 3.
+
+---
+
+### Email Class Registration
+
+All 37 subscription emails (25 core + 12 type-specific) must be registered as `WC_Email` subclasses:
+
+```php
+add_filter( 'woocommerce_email_classes', function( $emails ) {
+    // Core
+    $emails['PC_Email_SubscriptionRenewalReminder']  = new PC_Email_SubscriptionRenewalReminder();
+    $emails['PC_Email_SubscriptionRenewed']          = new PC_Email_SubscriptionRenewed();
+    $emails['PC_Email_SubscriptionActivated']        = new PC_Email_SubscriptionActivated();
+    $emails['PC_Email_SubscriptionCancelled']        = new PC_Email_SubscriptionCancelled();
+    $emails['PC_Email_SubscriptionExpired']          = new PC_Email_SubscriptionExpired();
+    $emails['PC_Email_SubscriptionPaused']           = new PC_Email_SubscriptionPaused();
+    $emails['PC_Email_SubscriptionResumed']          = new PC_Email_SubscriptionResumed();
+    $emails['PC_Email_SubscriptionTrialEnding']      = new PC_Email_SubscriptionTrialEnding();
+    $emails['PC_Email_SubscriptionPaymentFailed']    = new PC_Email_SubscriptionPaymentFailed();
+    $emails['PC_Email_SubscriptionSuspended']        = new PC_Email_SubscriptionSuspended();
+    $emails['PC_Email_CardExpiring']                 = new PC_Email_CardExpiring();
+    $emails['PC_Email_ScaRequired']                  = new PC_Email_ScaRequired();
+    $emails['PC_Email_CardUpdateRequest']            = new PC_Email_CardUpdateRequest();
+    $emails['PC_Email_SubscriptionSkipped']          = new PC_Email_SubscriptionSkipped();
+    $emails['PC_Email_EarlyRenewalAvailable']        = new PC_Email_EarlyRenewalAvailable();
+    $emails['PC_Email_PlanChanged']                  = new PC_Email_PlanChanged();
+    $emails['PC_Email_RetentionOfferAccepted']       = new PC_Email_RetentionOfferAccepted();
+    $emails['PC_Email_SubscriptionResubscribed']     = new PC_Email_SubscriptionResubscribed();
+    $emails['PC_Email_PendingCancellation']          = new PC_Email_PendingCancellation();
+    $emails['PC_Email_RenewalInvoice']               = new PC_Email_RenewalInvoice();
+    $emails['PC_Email_SubscriptionOnHold']           = new PC_Email_SubscriptionOnHold();
+    $emails['PC_Email_SubscriptionCompleted']        = new PC_Email_SubscriptionCompleted();
+    $emails['PC_Email_SteppedPriceChanging']         = new PC_Email_SteppedPriceChanging();
+    $emails['PC_Email_SubscriptionDowngraded']       = new PC_Email_SubscriptionDowngraded();
+    $emails['PC_Email_SubscriptionUpgraded']         = new PC_Email_SubscriptionUpgraded();
+    // Type-specific
+    $emails['PC_Email_MembershipTierChanged']        = new PC_Email_MembershipTierChanged();
+    $emails['PC_Email_MembershipAccessExpiring']     = new PC_Email_MembershipAccessExpiring();
+    $emails['PC_Email_MembershipGracePeriod']        = new PC_Email_MembershipGracePeriod();
+    $emails['PC_Email_MembershipRoleRevoked']        = new PC_Email_MembershipRoleRevoked();
+    $emails['PC_Email_NewContentDrip']               = new PC_Email_NewContentDrip();
+    $emails['PC_Email_DownloadQuotaReset']           = new PC_Email_DownloadQuotaReset();
+    $emails['PC_Email_DownloadLimitReached']         = new PC_Email_DownloadLimitReached();
+    $emails['PC_Email_CourseAccessGranted']          = new PC_Email_CourseAccessGranted();
+    $emails['PC_Email_CourseAccessExpiring']         = new PC_Email_CourseAccessExpiring();
+    $emails['PC_Email_CourseAccessRevoked']          = new PC_Email_CourseAccessRevoked();
+    $emails['PC_Email_DeliverableSubmitted']         = new PC_Email_DeliverableSubmitted();
+    $emails['PC_Email_ServiceInvoice']               = new PC_Email_ServiceInvoice();
+    return $emails;
+} );
+```
+
+Each class must:
+- Set `$this->id`, `$this->title`, `$this->description`, `$this->template_html`, `$this->template_plain`
+- Override `trigger( $subscription_id )` to set `$this->object` and call `$this->send()`
+- Template files: `woocommerce/emails/purecart-{email-slug}.php` (overridable by theme)
+
+---
+
+### Payment Token Integration
+
+Saved payment methods are stored as `WC_Payment_Token` records linked to the customer. PureCart reads the token from the subscription's `payment_token_id` field, which references a `WC_Payment_Token` ID.
+
+```php
+// When a customer deletes a saved payment method, check if any subscriptions depend on it
+add_action( 'woocommerce_payment_token_deleted', function( $token_id, $token ) {
+    // Find subscriptions using this token; update status or notify admin
+    PC_HealthCheck::handle_token_deleted( $token_id );
+}, 10, 2 );
+
+// When a customer sets a new default payment method
+add_action( 'woocommerce_payment_token_set_default', function( $token_id ) {
+    // Update payment_token_id on all active subscriptions for this customer
+    PC_SubscriptionManager::update_customer_token( get_current_user_id(), $token_id );
+} );
+```
+
+Payment method update flow (SCA card update):
+1. Admin or dunning triggers `POST /purecart/v1/subscriptions/{id}/send-card-update`
+2. Email sent to customer with `wc_get_endpoint_url( 'payment-methods', '', wc_get_page_permalink( 'myaccount' ) )` link
+3. Customer adds new card → WC Payment Token created
+4. Customer selects it as default → `woocommerce_payment_token_set_default` fires → subscription token updated
+
+---
+
+### My Account Endpoint Registration
+
+WooCommerce My Account uses a rewrite endpoint system. PureCart registers two endpoints:
+
+```php
+add_action( 'init', function() {
+    add_rewrite_endpoint( 'purecart-subscriptions', EP_ROOT | EP_PAGES );
+    add_rewrite_endpoint( 'purecart-subscription', EP_ROOT | EP_PAGES );
+} );
+```
+
+**Note:** `flush_rewrite_rules()` must be called on plugin activation (not on every load).
+
+```php
+// Add "Subscriptions" to My Account navigation
+add_filter( 'woocommerce_account_menu_items', function( $items ) {
+    $logout = $items['customer-logout'] ?? null;
+    unset( $items['customer-logout'] );
+    $items['purecart-subscriptions'] = __( 'Subscriptions', 'purecart' );
+    if ( $logout ) {
+        $items['customer-logout'] = $logout;
+    }
+    return $items;
+} );
+
+// Register endpoint URL slug in WC options (allows slug customization)
+add_filter( 'woocommerce_get_query_vars', function( $vars ) {
+    $vars['purecart-subscriptions'] = get_option( 'woocommerce_myaccount_purecart_subscriptions_endpoint', 'purecart-subscriptions' );
+    $vars['purecart-subscription']  = get_option( 'woocommerce_myaccount_purecart_subscription_endpoint', 'purecart-subscription' );
+    return $vars;
+} );
+
+// Set page title for the endpoint
+add_filter( 'woocommerce_endpoint_purecart-subscriptions_title', function() {
+    return __( 'Subscriptions', 'purecart' );
+} );
+add_filter( 'woocommerce_endpoint_purecart-subscription_title', function() {
+    return __( 'Subscription Details', 'purecart' );
+} );
+
+// Render the list page
+add_action( 'woocommerce_account_purecart-subscriptions_endpoint', function() {
+    wc_get_template(
+        'myaccount/purecart-subscriptions.php',
+        [ 'subscriptions' => PC_CustomerPortal::get_customer_subscriptions() ],
+        '',
+        PURECART_TEMPLATE_PATH
+    );
+} );
+
+// Render the detail page
+add_action( 'woocommerce_account_purecart-subscription_endpoint', function( $subscription_id ) {
+    $subscription = PC_SubscriptionManager::get( absint( $subscription_id ) );
+    if ( ! $subscription || $subscription->user_id !== get_current_user_id() ) {
+        wc_add_notice( __( 'Invalid subscription.', 'purecart' ), 'error' );
+        wp_redirect( wc_get_account_endpoint_url( 'purecart-subscriptions' ) );
+        exit;
+    }
+    wc_get_template(
+        'myaccount/purecart-subscription-detail.php',
+        [ 'subscription' => $subscription ],
+        '',
+        PURECART_TEMPLATE_PATH
+    );
+} );
+```
+
+**WC Admin → Settings → Advanced → Account endpoints** — option key must be registered so admins can customize the slug:
+- `woocommerce_myaccount_purecart_subscriptions_endpoint` (default: `purecart-subscriptions`)
+- `woocommerce_myaccount_purecart_subscription_endpoint` (default: `purecart-subscription`)
+
+---
+
+### WooCommerce Admin Order List Integration
+
+Renewal orders should be visually linked back to their subscription in the WC admin Orders list:
+
+```php
+// Add "Renewal for Subscription #X" column or order note
+add_filter( 'woocommerce_admin_order_actions', 'PC_Admin::add_subscription_link_to_order', 10, 2 );
+add_action( 'woocommerce_admin_order_data_after_order_details', 'PC_Admin::render_subscription_meta_box' );
+```
+
+The WC order detail screen shows a "Subscription" meta box linking to the PureCart subscription admin page.
+
+---
+
+### WooCommerce Analytics Integration
+
+```php
+// Register subscription revenue as a separate revenue source in WC Analytics
+add_filter( 'woocommerce_analytics_revenue_query_args', function( $args ) {
+    // Exclude renewal orders from WC's standard revenue total (they're tracked in wp_purecart_subscription_revenue)
+    $args['exclude_order_meta'] = array_merge(
+        $args['exclude_order_meta'] ?? [],
+        [ '_purecart_renewal_order' ]
+    );
+    return $args;
+} );
+```
+
+Phase 2: Register a custom WC Analytics data store for MRR/ARR in WC Analytics reports.
+
+---
+
+## Subscription Lifecycle
+
+```
+Order Completed (initial purchase — subscription product)
+    │
+    └── SubscriptionManager::create_from_order($order_id)
+            ├── Extract subscription product meta
+            ├── INSERT wp_purecart_subscriptions {
+            │       status: 'trialing' (if trial) or 'active',
+            │       trial_ends_at: NOW() + trial_days (or NULL),
+            │       next_payment_at: NOW() + billing_interval,
+            │       customer_ltv: estimated_24_month_value,
+            │       churn_risk_score: 0
+            │   }
+            ├── [Split payment] Set payment_type='split', max_payments=N
+            ├── [If Licensing active] → link license_id; set expires_at = next_payment_at
+            ├── [If SaaS active]     → AccountProvisioner::provision()
+            ├── Copy gateway meta keys from order to subscription record
+            ├── Log event: 'created'
+            └── Schedule: RenewalEngine::schedule_renewal(subscription_id, next_payment_at)
+
+Renewal Due (Action Scheduler fires purecart_process_renewal)
+    │
+    └── RenewalEngine::process_renewal($subscription_id)
+            ├── [Staging block] Check filter; abort if staging
+            ├── [pending_cancel] Finalize cancellation, do NOT charge
+            ├── [not 'active'] Return early
+            │
+            ├── [Gateway-scheduled] Check gateway capability 'gateway_scheduled_payments'
+            │       └── If true → return; gateway will call record_external_renewal() via webhook
+            │
+            ├── [Idempotency] Check _purecart_current_renewal_order_id
+            │       ├── Exists + paid  → skip (already charged)
+            │       └── Exists + unpaid → retry payment on same order
+            │
+            ├── [No existing order] Create renewal order
+            │       ├── Copy addresses + line items + shipping + fees from subscription
+            │       ├── Copy gateway meta keys to renewal order
+            │       ├── Copy _purecart_current_renewal_order_id to subscription
+            │       └── Fire do_action('purecart_renewal_order_created', $renewal_order, $subscription_id)
+            │
+            ├── [Zero-total] If total <= 0: payment_complete(); return
+            │
+            ├── [Split payment] If installment model: charge installment amount
+            │
+            ├── [Auto] process_automatic_renewal → gateway hook
+            │       └── Gateway fallbacks: handler → tokenization → manual
+            └── [Manual] process_manual_renewal → on-hold + send invoice email
+
+Renewal Payment Succeeds
+    │
+    └── maybe_complete_renewal($order_id) [triggered by woocommerce_order_status_completed/processing]
+            ├── UPDATE next_payment_at += interval
+            ├── UPDATE last_payment_at = NOW()
+            ├── UPDATE renewal_count++
+            ├── Clear _purecart_current_renewal_order_id
+            ├── [Split] INCREMENT installment_count; if = max_payments → complete subscription
+            ├── [Stepped pricing] If renewal_count >= step_after → apply step_price next cycle
+            ├── [Licensing] LicenseManager::extend(license_id, interval_days)
+            ├── [SaaS] AccountProvisioner::activate(account_id)
+            ├── [Retention discount] Decrement remaining discount cycles; clean up if exhausted
+            ├── ChurnScorer::on_payment_success($subscription_id)
+            ├── Log event: 'payment_success'
+            ├── Send "Renewal successful" email
+            └── Schedule next renewal
+
+Payment Failed (Dunning — 2-phase grace via Action Scheduler)
+    │
+    ├── Day 0:  Status → 'past_due'. Send "Payment failed" email.
+    │           License/SaaS access REMAINS ACTIVE (active grace phase).
+    │           ChurnScorer::on_payment_failed()
+    ├── Day N:  Retry charge (purecart_sub_retry_intervals e.g. [1, 3, 5]).
+    │           On success → Renewal Payment Succeeds flow above.
+    │           On failure → Send overdue reminder email.
+    ├── Day X:  Active grace days exhausted (default 7).
+    │           Status → 'suspended'. License suspended. SaaS suspended.
+    │           Send "Access suspended" email.
+    ├── Day X+N: Retry charges continue during suspended grace.
+    │           On success → Status → 'active'. Restore license/SaaS. Reactivation email.
+    │           Send "Suspended grace ending soon" when N days remain.
+    └── Day X+Y: Suspended grace days exhausted (default 7).
+                 Status → 'cancelled'. Final cancellation email.
+                 [Licensing] License stays until expires_at, then expires naturally.
+
+External Renewal (Gateway-Scheduled — webhook path)
+    │
+    └── RenewalEngine::record_external_renewal($subscription_id, ['transaction_id' => $txn_id])
+            ├── [Idempotency] Check existing renewal orders for this transaction_id; return if found
+            ├── Create renewal order → payment_complete($txn_id)
+            ├── maybe_complete_renewal() fires → advances schedule
+            └── Fire do_action('purecart_external_renewal_recorded', $renewal_order, $subscription_id)
+
+Customer Pauses Subscription
+    │
+    └── SubscriptionManager::pause($subscription_id, $pause_duration_days)
+            ├── UPDATE status='paused', paused_at=NOW(), pause_end_date=NOW()+N_days
+            ├── Cancel scheduled renewal Action Scheduler job
+            └── [License stays valid during pause]
+
+Customer Resumes Subscription
+    │
+    └── SubscriptionManager::resume($subscription_id)
+            ├── Calculate pause_duration = NOW() - paused_at
+            ├── UPDATE status='active', next_payment_at += pause_duration
+            ├── Clear pause_start_date, pause_end_date
+            └── Reschedule renewal job
+
+Auto-Resume (scheduled via Action Scheduler when pause_end_date reached)
+    └── Same as Customer Resumes above; log event: 'auto_resumed'
+
+Customer Skips Next Renewal
+    │
+    └── SubscriptionManager::skip($subscription_id)
+            ├── UPDATE next_payment_at += billing_interval, skip_count++
+            ├── Reschedule Action Scheduler job
+            ├── [License] LicenseManager::extend(license_id, interval_days)
+            └── Send "Skip renewal confirmed" email
+
+Customer Cancels — End of Period
+    │
+    └── SubscriptionManager::cancel($subscription_id, 'end_of_period')
+            ├── UPDATE status='pending_cancel', cancellation_date=next_payment_at
+            ├── Send "Pending cancellation" email
+            └── When process_renewal fires: finalize_cancellation()
+                    ├── UPDATE status='cancelled'
+                    ├── [SaaS] Suspend account
+                    └── Send "Cancellation" email
+
+Customer Cancels — Immediately
+    │
+    └── SubscriptionManager::cancel($subscription_id, 'immediate')
+            ├── UPDATE status='cancelled', cancelled_at=NOW()
+            ├── Cancel scheduled renewal
+            ├── Send "Cancellation" email
+            ├── [License stays active until expires_at]
+            └── [SaaS suspend — configurable: immediately or at period end]
+
+Customer Resubscribes
+    │
+    └── SubscriptionManager::resubscribe($subscription_id)
+            ├── New WC checkout for resubscription
+            ├── Create new subscription record (or re-activate if within N days)
+            ├── New payment collected immediately
+            └── [Licensing] Extend existing license or generate new one
+
+Early Renewal (customer-initiated before due date)
+    │
+    └── SubscriptionManager::early_renewal($subscription_id)
+            ├── Check status is 'active' or 'trialing'
+            ├── Create renewal order for billing_amount
+            │       ├── Mark order: _purecart_is_early_renewal = 'yes'
+            │       └── Store: _purecart_early_renewal_new_next_payment
+            ├── Return checkout payment URL to customer
+            └── On payment: advance next_payment_at, update renewal_count, log revenue
+```
+
+---
+
+## Split Payment / Installment Model
+
+Allows a product to be purchased via N installments. Inspired by Recurio.
+
+```
+Product: "PureCart Pro" — $300 total, paid as 3 × $100/month
+    _purecart_payment_type   = 'split'
+    _purecart_max_payments   = 3
+    _purecart_sub_price      = 100       (per-installment amount)
+    _purecart_access_timing  = 'immediate' | 'after_full_payment' | 'custom_duration'
+
+On purchase:
+    billing_amount = 300 / 3 = $100
+    renewal_count = 1 (first installment paid with order)
+    max_payments = 3
+    status = 'active' (if access_timing = immediate)
+          OR 'pending_payment' (if access_timing = after_full_payment)
+
+On each renewal:
+    renewal_count++
+    if renewal_count >= max_payments:
+        status → 'completed' (no more renewals)
+        [if access_timing = after_full_payment] → provision license/SaaS now
+        Send "Split payment completed" email
+    else:
+        continue billing as normal
+```
+
+`access_timing` values:
+- `immediate` — license/SaaS granted at purchase
+- `after_full_payment` — license/SaaS granted only after all installments paid
+- `custom_duration` — access granted for `access_duration_value` × `access_duration_unit` from purchase date
+
+---
+
+## Subscribe & Save
+
+Lets a product offer a discount to customers who subscribe vs. buying once. Inspired by Recurio.
+
+```
+Product: "PureCart Plugin" — $79 one-time OR $59/year (subscribe & save 25%)
+    _purecart_allow_one_time             = 'yes'
+    _purecart_sub_discount_type          = 'percentage' | 'fixed'
+    _purecart_sub_discount_value         = 25
+
+Cart display: shows both prices + savings badge.
+On add-to-cart: purchase type ('subscription' or 'one-time') stored in cart/order item meta.
+On order processing: if one-time → skip subscription creation.
+```
+
+---
+
+## Churn Risk Scoring
+
+A numeric score (0–100) stored on each subscription, updated after each payment event. Surfaced in admin list table and reports.
+
+```
+Score increases on:
+    - payment_failed (+20)
+    - retry_failed (+10 per retry)
+    - customer_initiated_cancel (+30)
+    - skip_next_cycle (+5)
+    - pause (+10)
+
+Score decreases on:
+    - payment_success (−15, floor 0)
+    - renewal_count milestone (−5 per 12 renewals)
+
+Scoring bands:
+    0–25: Low risk (green)
+    26–50: Medium risk (yellow)
+    51–75: High risk (orange)
+    76–100: Critical (red)
+```
+
+`ChurnScorer::compute($subscription_id)` is called by `RenewalEngine` and `DunningManager` after every payment event. Result is stored in `wp_purecart_subscriptions.churn_risk_score`.
+
+---
+
+## Customer LTV Calculation
+
+Estimated 24-month lifetime value, stored on the subscription at creation and updated on plan change or price update.
+
+```php
+// Industry average: 24 months
+$avg_lifetime_months = apply_filters( 'purecart_sub_avg_lifetime_months', 24 );
+
+$monthly_equivalent = match( $billing_period ) {
+    'day'   => ($billing_amount * 30) / $billing_interval,
+    'week'  => ($billing_amount * 4.33) / $billing_interval,
+    'month' => $billing_amount / $billing_interval,
+    'year'  => $billing_amount / ($billing_interval * 12),
+};
+
+$ltv = round( $monthly_equivalent * $avg_lifetime_months, 2 );
+```
+
+Stored in `wp_purecart_subscriptions.customer_ltv`.
+
+---
+
+## Card Expiry Warnings
+
+`HealthCheck` runs daily via Action Scheduler and scans active subscriptions whose stored payment method card expires within the configured window (default 30 days). An expiry warning email is dispatched with a payment method update link.
+
+```php
+// Action Scheduler job
+add_action( 'purecart_check_card_expiry', [ HealthCheck::class, 'dispatch_expiry_warnings' ] );
+
+// Email sent per affected subscription
+do_action( 'purecart_customer_card_expiring', $subscription_id, $days_until_expiry );
+```
+
+Card expiry data sourced from the WC payment token's `expiry_month` / `expiry_year` metadata.
+
+---
+
+## SCA / Payment Reauthorization
+
+For Stripe (and other SCA-regulated gateways), off-session charges require the customer to reauthorize if authentication is needed. `RenewalEngine` detects SCA failures and sends a reauthorization email with a secure one-time payment link.
+
+```
+Renewal charge → SCA authentication required
+    │
+    ├── Create pending renewal order
+    ├── Store _purecart_reauth_required = 'yes' on order
+    ├── Generate signed reauth URL (WC order pay page + nonce)
+    └── Send "Payment reauthorization required" email with link
+        │
+        └── Customer completes payment → standard renewal complete flow
+```
+
+---
+
+## One Trial Per Customer
+
+When `purecart_sub_one_trial_per_customer` is enabled, the trial is stripped if the customer already trialled this product (prevents trial abuse via cancel + resubscribe):
+
+```php
+$used = get_user_meta( $user_id, '_purecart_trial_used_' . $product_id, true );
+if ( $used ) {
+    // Strip trial; bill full price from day 1
+}
+
+// On trial conversion (first charge collected):
+update_user_meta( $user_id, '_purecart_trial_used_' . $product_id, true );
+```
+
+---
+
+## Stepped Renewal Pricing
+
+Introductory price for the first N cycles, then permanent step to regular price.
+
+**Example:** $9/mo for 3 months → $29/mo ongoing.
+
+```
+_purecart_sub_price      = 9.00   (introductory)
+_purecart_sub_step_price = 29.00  (after N cycles)
+_purecart_sub_step_after = 3
+
+RenewalEngine::process_renewal():
+    if ( step_price > 0 && renewal_count >= step_after ) {
+        use step_price for this renewal order
+    }
+```
+
+---
+
+## Renewal Sync
+
+Aligns all subscriptions for a product to a fixed calendar date.
+
+```
+Customer subscribes June 15.
+purecart_sub_renewal_sync = true, purecart_sub_renewal_sync_date = 1
+
+First payment: prorated amount June 15→July 1 (16/30 × price).
+Second payment: full price July 1.
+All subsequent: 1st of each month.
+```
+
+---
+
+## Role Mapping
+
+WordPress user roles assigned on subscription status transitions:
+
+| Transition | Role action |
+|---|---|
+| Trial starts | Assign `_purecart_sub_role_trial` (if configured) |
+| Trial converts | Remove trial role; assign `_purecart_sub_role_active` |
+| Active → suspended / cancelled / expired | Remove active role; assign `_purecart_sub_role_cancelled` |
+| Resubscribe | Re-assign active role |
+
+`RoleManager` hooks into `purecart_subscription_status_changed`.
+
+---
+
+## Subscription Delivery Types
+
+PureCart subscriptions support six delivery types, set per-product via `_purecart_sub_delivery_type`. The delivery type drives what linked entity is provisioned on activation, which admin actions are available, and which type-specific settings sections apply.
+
+| Type | Value | What's Provisioned | Module Dependency |
+|---|---|---|---|
+| **Software / Plugin** | `software` | License key + domain activations | Licensing module |
+| **SaaS Platform** | `saas` | SaaS account + seat allocation | SaaS module |
+| **Membership** | `membership` | WordPress role + content restriction tier | None (built-in) |
+| **Digital Downloads** | `download` | Per-cycle download quota + drip schedule | Downloads module |
+| **Learning / Course** | `course` | LMS enrollment (LearnDash / LifterLMS / Tutor LMS) | None (LMS API) |
+| **Service / Retainer** | `service` | Deliverable tracking + optional invoice | None (built-in) |
+
+`software` and `saas` already have their linked entity IDs stored in the subscriptions table (`license_id`, `saas_account_id`). The remaining four types store their linked data in `wp_purecart_subscription_linked_entities`.
+
+---
+
+### Delivery Type: Membership
+
+Role assignment is handled by `RoleManager` (see Role Mapping section). Additional membership-specific features:
+
+| Feature | Description | Meta / Config |
+|---|---|---|
+| Membership tier | Named tier (e.g., Gold, Silver, Bronze) | `_purecart_sub_membership_tier` product meta |
+| Content restriction label | Human-readable access label shown in admin/My Account | Stored in linked entity |
+| Grace period on cancellation | Access maintained N days after cancellation before role removal | `purecart_sub_membership_grace_days` |
+| Tier change | Admin can change tier mid-subscription | Fires `purecart_membership_tier_changed`; updates linked entity |
+| Role re-sync on renewal | Validates assigned role still exists on each renewal | Runs in `purecart_subscription_renewed` hook |
+
+**Lifecycle hooks:**
+- `purecart_subscription_activated` → assign active role + store tier in linked entity
+- `purecart_subscription_cancelled` / `purecart_subscription_expired` → schedule grace period expiry via Action Scheduler
+- `purecart_membership_grace_expired` → remove role; fire `purecart_subscription_status_changed`
+- `purecart_membership_tier_changed` → update `membership_tier` + `content_access_label` in linked entity; re-apply role if tier has different role mapping
+
+---
+
+### Delivery Type: Digital Downloads
+
+Download quota resets each billing cycle. Drip content is scheduled via Action Scheduler.
+
+| Feature | Description | Meta / Config |
+|---|---|---|
+| Download quota per cycle | N downloads allowed per billing period; 0 = unlimited | `_purecart_sub_download_limit` product meta |
+| Downloads this cycle counter | Running count reset to 0 on each successful renewal | `downloads_this_cycle` in linked entity |
+| Quota reset on renewal | Counter resets on `purecart_subscription_renewed` | Enforced by Downloads module via filter |
+| Drip content | Scheduled file releases at configured intervals | `_purecart_sub_drip_interval` + `_purecart_sub_drip_unit` product meta |
+| Next drip date | ISO-8601 date stored in linked entity | Advances by drip interval after each delivery |
+| Access revocation | Download access revoked on cancellation/expiry | Hooks into `purecart_subscription_cancelled` |
+
+**Lifecycle hooks:**
+- `purecart_subscription_renewed` → reset `downloads_this_cycle` to 0 in linked entity; schedule next drip delivery via Action Scheduler group `'purecart'`
+- `purecart_subscription_cancelled` / `purecart_subscription_expired` → revoke download access at period end
+- `purecart_drip_content_delivered` → advance `next_drip_date` in linked entity; notify customer
+
+---
+
+### Delivery Type: Learning / Course (LMS)
+
+LMS enrollment managed via the configured LMS plugin's PHP API.
+
+| Feature | Description | Meta / Config |
+|---|---|---|
+| LMS plugin selector | LearnDash, LifterLMS, or Tutor LMS | `purecart_sub_lms_plugin` config option |
+| Course assignment | Product linked to one or more LMS course IDs | `_purecart_sub_lms_course_ids` product meta (JSON array of int IDs) |
+| Enrollment on activation | Enroll user in all linked courses; store enrollment ID | Hooked into `purecart_subscription_activated` |
+| Enrollment expiry extension | Extend enrollment end date on each renewal | Hooked into `purecart_subscription_renewed` |
+| Revocation on cancellation | Unenroll user from all linked courses at period end | Hooked into `purecart_subscription_cancelled` |
+| Access extension (admin) | Admin can extend `course_access_until` date manually | REST action endpoint |
+| LMS enrollment ID | Stored as `lms_enrollment_id` in linked entity | |
+| Course access until | ISO-8601 date stored as `course_access_until` in linked entity | |
+
+**Lifecycle hooks:**
+- `purecart_subscription_activated` → enroll user in each course ID; store `lms_enrollment_id` and `course_access_until` in linked entity
+- `purecart_subscription_renewed` → extend `course_access_until` by one billing period
+- `purecart_subscription_cancelled` → schedule revocation via Action Scheduler at `cancellation_date`
+- `purecart_subscription_expired` → immediate revocation
+- `purecart_course_access_revoked` → log event; fire status hook
+
+---
+
+### Delivery Type: Service / Retainer
+
+Monthly agency retainer, consulting plan, or support subscription. Tracks deliverables per cycle.
+
+| Feature | Description | Meta / Config |
+|---|---|---|
+| Deliverable notes template | What the vendor delivers each cycle | `_purecart_sub_deliverable_notes` product meta |
+| Deliverable due date | When the next deliverable is due; advances each renewal | `next_deliverable_due` in linked entity |
+| Mark deliverable complete | Admin action; logs event and notifies customer | REST action endpoint; fires `purecart_deliverable_completed` |
+| Invoice mode | None / WooCommerce order / PDF attachment | `purecart_sub_service_invoice_mode` config option |
+| Auto-invoice on renewal | Generates and sends invoice on each successful renewal | Hooked into `purecart_subscription_renewed` |
+| Deliverable notes per subscription | Free-text override notes for this specific subscription | `deliverable_notes` in linked entity |
+
+**Lifecycle hooks:**
+- `purecart_subscription_renewed` → advance `next_deliverable_due` by one billing period in linked entity; generate invoice if configured
+- `purecart_deliverable_completed` → log event in subscription logs; send customer notification email
+- `purecart_subscription_cancelled` → mark service as ending; no new deliverable due date
+
+---
+
+## Database Schema
+
+### `wp_purecart_subscriptions`
+
+```sql
+CREATE TABLE {prefix}purecart_subscriptions (
+    id                      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id                 BIGINT UNSIGNED NOT NULL,
+    product_id              BIGINT UNSIGNED NOT NULL,
+    order_id                BIGINT UNSIGNED NOT NULL,        -- initial order
+    license_id              BIGINT UNSIGNED NULL,
+    saas_account_id         BIGINT UNSIGNED NULL,
+    delivery_type           ENUM(
+                                'software',
+                                'saas',
+                                'membership',
+                                'download',
+                                'course',
+                                'service'
+                            ) DEFAULT 'software',
+    status                  ENUM(
+                                'trialing',
+                                'active',
+                                'paused',
+                                'past_due',
+                                'suspended',
+                                'pending_cancel',
+                                'cancelled',
+                                'expired',
+                                'completed'                  -- split payment fully paid
+                            ) DEFAULT 'active',
+    billing_interval        INT UNSIGNED NOT NULL,
+    billing_period          ENUM('day','week','month','year') NOT NULL,
+    recurring_amount        DECIMAL(10,2) NOT NULL,
+    currency                VARCHAR(10) DEFAULT 'USD',
+    signup_fee              DECIMAL(10,2) DEFAULT 0.00,
+    trial_ends_at           DATETIME NULL,
+    next_payment_at         DATETIME NULL,
+    last_payment_at         DATETIME NULL,
+    max_length_at           DATETIME NULL,                   -- NULL = indefinite
+    paused_at               DATETIME NULL,
+    pause_end_date          DATETIME NULL,
+    cancelled_at            DATETIME NULL,
+    cancellation_date       DATETIME NULL,                   -- for pending_cancel
+    gateway                 VARCHAR(50) NULL,
+    gateway_subscription_id VARCHAR(255) NULL,
+    payment_token_id        BIGINT UNSIGNED NULL,
+    retry_count             TINYINT UNSIGNED DEFAULT 0,
+    renewal_count           INT UNSIGNED DEFAULT 0,
+    skip_count              INT UNSIGNED DEFAULT 0,
+    max_renewals            INT UNSIGNED NULL,               -- NULL = unlimited
+    -- Split payment fields
+    payment_type            ENUM('recurring','split') DEFAULT 'recurring',
+    max_payments            INT UNSIGNED NULL,               -- installments total
+    access_timing           ENUM('immediate','after_full_payment','custom_duration') DEFAULT 'immediate',
+    access_duration_value   INT UNSIGNED NULL,
+    access_duration_unit    ENUM('day','week','month','year') NULL,
+    access_end_date         DATETIME NULL,
+    -- Stepped pricing
+    step_price              DECIMAL(10,2) NULL,
+    step_after              INT UNSIGNED NULL,
+    -- Analytics
+    churn_risk_score        TINYINT UNSIGNED DEFAULT 0,      -- 0-100
+    customer_ltv            DECIMAL(10,2) DEFAULT 0.00,
+    -- Pending plan switch
+    pending_switch_product  BIGINT UNSIGNED NULL,
+    pending_switch_type     ENUM('upgrade','downgrade') NULL,
+    -- Shipping snapshot
+    shipping_amount         DECIMAL(10,2) DEFAULT 0.00,
+    shipping_method         VARCHAR(255) NULL,
+    -- Addresses (JSON)
+    billing_address         TEXT NULL,
+    shipping_address        TEXT NULL,
+    starts_at               DATETIME NOT NULL,
+    created_at              DATETIME NOT NULL,
+    updated_at              DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    KEY idx_user_id (user_id),
+    KEY idx_product_id (product_id),
+    KEY idx_status (status),
+    KEY idx_next_payment (next_payment_at),
+    KEY idx_trial_ends (trial_ends_at),
+    KEY idx_pause_end (pause_end_date),
+    KEY idx_churn (churn_risk_score)
+);
+```
+
+### `wp_purecart_subscription_linked_entities`
+
+Stores type-specific linked data for `membership`, `download`, `course`, and `service` delivery types. (`software` uses `license_id`; `saas` uses `saas_account_id` — both already on the subscriptions table.)
+
+```sql
+CREATE TABLE {prefix}purecart_subscription_linked_entities (
+    id                      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    subscription_id         BIGINT UNSIGNED NOT NULL,
+    delivery_type           ENUM('membership','download','course','service') NOT NULL,
+    -- Membership
+    membership_tier         VARCHAR(100) NULL,
+    assigned_role           VARCHAR(100) NULL,
+    content_access_label    VARCHAR(255) NULL,
+    grace_ends_at           DATETIME NULL,
+    -- Digital downloads
+    downloads_this_cycle    INT UNSIGNED DEFAULT 0,
+    download_limit          INT UNSIGNED NULL,              -- NULL = unlimited
+    next_drip_date          DATETIME NULL,
+    -- Course / LMS
+    lms_enrollment_id       VARCHAR(255) NULL,
+    enrolled_course_ids     TEXT NULL,                     -- JSON array of int IDs
+    course_access_until     DATETIME NULL,
+    -- Service / Retainer
+    deliverable_notes       TEXT NULL,
+    next_deliverable_due    DATETIME NULL,
+    last_deliverable_at     DATETIME NULL,
+    created_at              DATETIME NOT NULL,
+    updated_at              DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uniq_subscription (subscription_id),
+    KEY idx_delivery_type (delivery_type),
+    KEY idx_next_drip (next_drip_date),
+    KEY idx_course_access (course_access_until),
+    KEY idx_grace_ends (grace_ends_at)
+);
+```
+
+### `wp_purecart_subscription_logs`
+
+```sql
+CREATE TABLE {prefix}purecart_subscription_logs (
+    id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    subscription_id BIGINT UNSIGNED NOT NULL,
+    event           VARCHAR(100) NOT NULL,
+    old_status      VARCHAR(30) NULL,
+    new_status      VARCHAR(30) NULL,
+    amount          DECIMAL(10,2) NULL,
+    order_id        BIGINT UNSIGNED NULL,
+    note            TEXT NULL,
+    created_at      DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    KEY idx_subscription_id (subscription_id),
+    KEY idx_event (event),
+    KEY idx_created_at (created_at)
+);
+```
+
+### `wp_purecart_subscription_revenue`
+
+Separate revenue ledger for MRR/ARR analytics and revenue goals. Inspired by Recurio.
+
+```sql
+CREATE TABLE {prefix}purecart_subscription_revenue (
+    id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    subscription_id BIGINT UNSIGNED NOT NULL,
+    amount          DECIMAL(10,2) NOT NULL,
+    currency        VARCHAR(10) DEFAULT 'USD',
+    billing_period  VARCHAR(20) NULL,
+    period_start    DATE NOT NULL,
+    period_end      DATE NOT NULL,
+    transaction_id  VARCHAR(255) NULL,
+    gateway         VARCHAR(50) NULL,
+    created_at      DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    KEY idx_subscription_id (subscription_id),
+    KEY idx_period_start (period_start),
+    UNIQUE KEY uniq_transaction (transaction_id)
+);
+```
+
+### `wp_purecart_revenue_goals`
+
+```sql
+CREATE TABLE {prefix}purecart_revenue_goals (
+    id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    name            VARCHAR(255) NOT NULL,
+    target_amount   DECIMAL(10,2) NOT NULL,
+    current_amount  DECIMAL(10,2) DEFAULT 0.00,
+    start_date      DATE NOT NULL,
+    end_date        DATE NOT NULL,
+    status          ENUM('active','achieved','missed') DEFAULT 'active',
+    created_at      DATETIME NOT NULL,
+    updated_at      DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    KEY idx_status_dates (status, start_date, end_date)
+);
+```
+
+---
+
+## Product Meta Fields
+
+| Meta Key | Type | Description |
+|---|---|---|
+| `_purecart_sub_price` | decimal | Recurring price |
+| `_purecart_sub_interval` | int | Billing interval number |
+| `_purecart_sub_period` | string | `day`, `week`, `month`, `year` |
+| `_purecart_sub_trial_length` | int | Trial period number |
+| `_purecart_sub_trial_period` | string | `day`, `week`, `month` |
+| `_purecart_sub_signup_fee` | decimal | One-time sign-up fee |
+| `_purecart_sub_length` | int | Max subscription length (0 = indefinite) |
+| `_purecart_sub_length_period` | string | `month`, `year` |
+| `_purecart_sub_limit` | int | Max active subscriptions per customer |
+| `_purecart_sub_proration` | string | `prorate_immediately`, `apply_at_renewal`, `no_proration` |
+| `_purecart_sub_step_price` | decimal | Stepped renewal price after N cycles |
+| `_purecart_sub_step_after` | int | Cycles before stepped price kicks in |
+| `_purecart_sub_include_shipping` | bool | Include shipping in renewal orders |
+| `_purecart_sub_include_tax` | bool | Include tax in renewal orders |
+| `_purecart_sub_retention_enabled` | bool | Enable retention flow |
+| `_purecart_sub_retention_reasons` | JSON | Cancellation reason list |
+| `_purecart_sub_retention_offers` | JSON | Offer configs keyed by reason |
+| `_purecart_allow_one_time` | bool | Enable subscribe & save (show both prices) |
+| `_purecart_sub_discount_type` | string | `percentage` or `fixed` |
+| `_purecart_sub_discount_value` | decimal | Subscribe & save discount amount |
+| `_purecart_payment_type` | string | `recurring` or `split` |
+| `_purecart_max_payments` | int | Installment count (split payment) |
+| `_purecart_access_timing` | string | `immediate`, `after_full_payment`, `custom_duration` |
+| `_purecart_access_duration_value` | int | Duration value for custom_duration access |
+| `_purecart_access_duration_unit` | string | Duration unit for custom_duration access |
+| `_purecart_sub_downgrade_products` | array | Product IDs available as downgrade options |
+| `_purecart_sub_delivery_type` | string | `software`, `saas`, `membership`, `download`, `course`, `service` |
+| `_purecart_sub_membership_tier` | string | Default membership tier name (e.g., Gold) |
+| `_purecart_sub_download_limit` | int | Downloads allowed per billing cycle (0 = unlimited) |
+| `_purecart_sub_drip_interval` | int | Drip content delivery interval number |
+| `_purecart_sub_drip_unit` | string | Drip interval unit: `day`, `week`, `month` |
+| `_purecart_sub_lms_course_ids` | JSON | Array of LMS course IDs to enroll on activation |
+| `_purecart_sub_deliverable_notes` | string | Template text describing the service deliverable |
+
+---
+
+## Configuration Options
+
+| Option | Default | Description |
+|---|---|---|
+| `purecart_sub_auto_renew` | `true` | Enable automatic renewal |
+| `purecart_sub_retry_attempts` | `3` | Failed payment retry attempts |
+| `purecart_sub_retry_intervals` | `[1,3,5]` | Days between retries |
+| `purecart_sub_active_grace_days` | `7` | Days in past_due before suspension |
+| `purecart_sub_suspended_grace_days` | `7` | Days suspended before hard cancellation |
+| `purecart_sub_proration_mode` | `apply_at_renewal` | Default proration mode |
+| `purecart_sub_skip_limit` | `1` | Max skip-next-renewal uses per billing year (0 = unlimited) |
+| `purecart_sub_renewal_sync` | `false` | Align renewals to fixed calendar date |
+| `purecart_sub_renewal_sync_date` | `1` | Day of month for renewal sync |
+| `purecart_sub_one_trial_per_customer` | `true` | Block trial for returning customers |
+| `purecart_sub_trial_role` | `''` | WP role during active trial |
+| `purecart_sub_active_role` | `''` | WP role for active subscriptions |
+| `purecart_sub_cancelled_role` | `''` | WP role for cancelled/expired subscriptions |
+| `purecart_sub_renewal_reminder_days` | `[7,3,1]` | Days before renewal for reminder emails |
+| `purecart_sub_card_expiry_warning_days` | `30` | Days before card expiry to send warning |
+| `purecart_sub_allow_pause` | `true` | Allow customer self-pause |
+| `purecart_sub_allow_cancel` | `true` | Allow customer self-cancel |
+| `purecart_sub_allow_upgrade` | `true` | Allow customer upgrade/downgrade |
+| `purecart_sub_allow_early_renewal` | `true` | Allow customer early renewal |
+| `purecart_sub_allow_skip` | `true` | Allow customer to skip next renewal |
+| `purecart_sub_cancel_saas_immediately` | `false` | Suspend SaaS on cancel vs. at period end |
+| `purecart_sub_avg_lifetime_months` | `24` | Months used for LTV projection |
+| `purecart_sub_gateway_meta_keys` | `[...]` | Gateway meta keys copied to renewal orders |
+| `purecart_sub_staging_domains` | `[]` | Domain patterns where renewals are blocked |
+| `purecart_sub_membership_grace_days` | `3` | Days of continued access after membership cancellation before role removal |
+| `purecart_sub_lms_plugin` | `'learndash'` | LMS integration: `learndash`, `lifterlms`, `tutor` |
+| `purecart_sub_service_invoice_mode` | `'none'` | Service invoice on renewal: `none`, `wc_order`, `pdf` |
+
+---
+
+## REST API Endpoints
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/purecart/v1/subscriptions` | manage_woocommerce | List all subscriptions |
+| `GET` | `/purecart/v1/subscriptions/{id}` | manage_woocommerce | Get subscription detail |
+| `POST` | `/purecart/v1/subscriptions/{id}/pause` | Customer / Admin | Pause subscription |
+| `POST` | `/purecart/v1/subscriptions/{id}/resume` | Customer / Admin | Resume subscription |
+| `POST` | `/purecart/v1/subscriptions/{id}/cancel` | Customer / Admin | Cancel (immediate or end-of-period) |
+| `POST` | `/purecart/v1/subscriptions/{id}/skip` | Customer / Admin | Skip next renewal |
+| `POST` | `/purecart/v1/subscriptions/{id}/renew` | manage_woocommerce | Manual renewal trigger |
+| `POST` | `/purecart/v1/subscriptions/{id}/early-renewal` | Customer / Admin | Early renewal |
+| `POST` | `/purecart/v1/subscriptions/{id}/upgrade` | Customer / Admin | Upgrade / downgrade plan |
+| `POST` | `/purecart/v1/subscriptions/{id}/resubscribe` | Customer / Admin | Resubscribe |
+| `GET` | `/purecart/v1/subscriptions/{id}/logs` | manage_woocommerce | Event log |
+| `GET` | `/purecart/v1/subscriptions/{id}/cancellation/reasons` | Public | Cancellation reasons |
+| `GET` | `/purecart/v1/subscriptions/{id}/cancellation/offers` | Customer | Available retention offers |
+| `POST` | `/purecart/v1/subscriptions/{id}/cancellation/accept-offer` | Customer | Accept retention offer |
+| `POST` | `/purecart/v1/subscriptions/{id}/external-renewal` | Server / Webhook | Record external gateway renewal |
+| `POST` | `/purecart/v1/subscriptions/{id}/retry-payment` | manage_woocommerce | Manually trigger a payment retry |
+| `POST` | `/purecart/v1/subscriptions/{id}/send-card-update` | manage_woocommerce | Send card update request email to customer |
+| `POST` | `/purecart/v1/subscriptions/{id}/request-reauth` | manage_woocommerce | Trigger SCA reauthorization email |
+| `GET` | `/purecart/v1/subscriptions/revenue-goals` | manage_woocommerce | List all revenue goals |
+| `POST` | `/purecart/v1/subscriptions/revenue-goals` | manage_woocommerce | Create revenue goal |
+| `DELETE` | `/purecart/v1/subscriptions/revenue-goals/{goal_id}` | manage_woocommerce | Delete a revenue goal |
+| `POST` | `/purecart/v1/subscriptions/{id}/membership/change-tier` | manage_woocommerce | Change membership tier |
+| `POST` | `/purecart/v1/subscriptions/{id}/membership/set-grace-period` | manage_woocommerce | Set or extend membership grace period |
+| `POST` | `/purecart/v1/subscriptions/{id}/membership/sync-role` | manage_woocommerce | Force re-sync WordPress role to current tier |
+| `POST` | `/purecart/v1/subscriptions/{id}/downloads/reset-quota` | manage_woocommerce | Reset downloads-this-cycle counter to 0 |
+| `POST` | `/purecart/v1/subscriptions/{id}/downloads/trigger-drip` | manage_woocommerce | Manually trigger next drip content delivery |
+| `POST` | `/purecart/v1/subscriptions/{id}/courses/extend-access` | manage_woocommerce | Extend course_access_until by N days |
+| `POST` | `/purecart/v1/subscriptions/{id}/courses/revoke` | manage_woocommerce | Immediately revoke all LMS enrollments |
+| `POST` | `/purecart/v1/subscriptions/{id}/service/complete-deliverable` | manage_woocommerce | Mark current cycle deliverable as complete |
+| `POST` | `/purecart/v1/subscriptions/{id}/service/send-invoice` | manage_woocommerce | Manually send invoice for current cycle |
+
+---
+
+## Admin Panel Structure
+
+**PureCart → Subscriptions**
+
+### List Table Columns
+
+| Column | Description |
+|---|---|
+| Subscription ID | Unique ID (SUB-XXXXX) |
+| Customer | Name + email |
+| Product | Subscription product name |
+| Status | Badge: active / trialing / paused / past_due / pending_cancel / suspended / cancelled / expired / completed |
+| Recurring Amount | Price + billing cycle |
+| Next Payment | Date of next renewal |
+| Churn Risk | Color-coded score badge |
+| Started | Start date |
+| Actions | View, Cancel, Renew now |
+
+Filterable by: status, product, date range, customer, churn risk band.
+
+### Detail Page Tabs
+
+- **Overview** — all subscription fields, status, dates, churn score, LTV
+- **Payment Log** — all renewal attempts with order IDs, amounts, gateway responses
+- **Status History** — every status change with timestamp and reason
+- **Emails Sent** — log of all notifications for this subscription
+- **Retention** — cancellation reason, offer shown, accepted/declined, discount cycles remaining
+
+### Settings Tabs (PureCart Settings → Subscriptions)
+
+| Tab | Key Options |
+|---|---|
+| General | Enable/disable, auto-renew, mixed cart, subscribe & save |
+| Billing | Retry attempts, retry intervals, overdue/suspend days, split payments |
+| Renewals | Reminder days, renewal email templates, card expiry warning |
+| Upgrade/Downgrade | Proration mode, downgrade products |
+| Retention | Cancellation reasons, offer types, eligibility rules |
+| Customer Portal | Allow pause/cancel/upgrade/skip/early-renewal from My Account |
+| Notifications | Email template customization per event |
+| Reports | Revenue goals, churn thresholds |
+| Advanced | Staging domains, gateway meta keys, debug mode |
+
+---
+
+## Customer My Account Portal
+
+The customer-facing subscription UI lives inside WooCommerce's My Account area. It is server-rendered PHP using WC templates — **not** the React admin panel. All self-service actions POST via AJAX with a WC nonce.
+
+### Template File Structure
+
+```
+your-theme/woocommerce/           ← theme override root
+    myaccount/
+        purecart-subscriptions.php          ← subscription list
+        purecart-subscription-detail.php    ← single subscription view
+
+plugin: includes/templates/woocommerce/myaccount/
+    purecart-subscriptions.php
+    purecart-subscription-detail.php
+```
+
+Templates are loaded via `wc_get_template( ..., PURECART_TEMPLATE_PATH )` — overridable by placing files in `your-theme/woocommerce/myaccount/`.
+
+---
+
+### Subscriptions List Page (`/my-account/purecart-subscriptions/`)
+
+**URL:** `wc_get_account_endpoint_url( 'purecart-subscriptions' )` (slug configurable in WC settings)
+
+**What's displayed:**
+
+| Column | Content |
+|---|---|
+| Subscription | ID badge + product name |
+| Status | Status badge (active / paused / trialing / past_due / pending_cancel / cancelled / expired) |
+| Amount | Recurring price + billing cycle (e.g., $9.99 / month) |
+| Next Payment | Date or "–" for cancelled/expired |
+| Type badge | Software / SaaS / Membership / Downloads / Course / Service |
+| Actions | View · Manage |
+
+**No subscriptions:** show a "No active subscriptions" message with a link to the shop.
+
+**Filter:** active-only tab vs all subscriptions tab (or dropdown).
+
+---
+
+### Subscription Detail Page (`/my-account/purecart-subscription/{id}/`)
+
+**URL:** `wc_get_account_endpoint_url( 'purecart-subscription' ) . $id`
+
+**Security:** `PC_CustomerPortal` verifies `$subscription->user_id === get_current_user_id()` on every load; redirect to list on mismatch.
+
+#### Section 1 — Overview
+
+| Field | Display |
+|---|---|
+| Subscription ID | `#SUB-XXXXX` |
+| Product | Product name + link to product page |
+| Status | Status badge |
+| Started | Human-readable date |
+| Next Payment | Date or "Access until: {date}" for cancelled-pending |
+| Amount | `$9.99 / month` (or installment progress: `2 of 12 payments`) |
+| Payment Method | Card brand + last 4 + expiry (masked) |
+
+#### Section 2 — Delivery Type Panel (conditional)
+
+Rendered based on `delivery_type`:
+
+| Type | Panel content |
+|---|---|
+| `software` | License key (masked with reveal button) · Active domains: `2/3` · Link to Licenses page |
+| `saas` | Account name · Seats: `18/25` · Link to SaaS account |
+| `membership` | Tier badge (Gold/Silver/Bronze) · Access label · Role: `subscriber` |
+| `download` | Downloads this cycle: `3/10` · Quota resets: next renewal date · Next drip: date |
+| `course` | Enrolled courses list with names · Access until: date |
+| `service` | Next deliverable due: date · Deliverable notes |
+
+#### Section 3 — Payment History (collapsed by default)
+
+Table: Date · Amount · Status (Paid / Failed / Refunded) · Order link.
+Last 5 payments shown; "View all" expands or links to order history.
+
+#### Section 4 — Self-Service Actions
+
+Shown/hidden based on `purecart_sub_allow_*` settings and current subscription status:
+
+| Action | Condition | What it does |
+|---|---|---|
+| **Pause** | `allow_pause = true`, status = active or trialing | Opens duration picker modal → AJAX `purecart_customer_pause` |
+| **Resume** | Status = paused | AJAX `purecart_customer_resume` |
+| **Skip Next Renewal** | `allow_skip = true`, skip limit not reached | Confirm modal → AJAX `purecart_customer_skip` |
+| **Change Payment Method** | Status not cancelled/expired | Redirect to WC `/my-account/payment-methods/` |
+| **Upgrade / Downgrade** | `allow_upgrade = true`, upgrade products configured | Plan picker modal → AJAX `purecart_customer_upgrade` |
+| **Early Renewal** | `allow_early_renewal = true`, status = active | Confirm + redirect to checkout with early-renewal cart |
+| **Cancel** | `allow_cancel = true`, status not already cancelled | 3-step retention modal (see below) |
+| **Resubscribe** | Status = cancelled / expired | Redirect to add-to-cart for original product |
+
+All AJAX actions return JSON `{ success, message, redirect? }` and refresh the page or update status inline.
+
+**Nonce:** every AJAX request includes `wp_nonce_field( 'purecart_customer_action', 'purecart_nonce' )`. Server verifies with `check_ajax_referer( 'purecart_customer_action', 'purecart_nonce' )`.
+
+---
+
+### Customer AJAX Handlers
+
+Registered as `wp_ajax_{action}` (logged-in customers only — never `wp_ajax_nopriv_`):
+
+| Action | Handler | Auth check |
+|---|---|---|
+| `purecart_customer_pause` | `PC_CustomerPortal::ajax_pause` | User owns subscription + allow_pause |
+| `purecart_customer_resume` | `PC_CustomerPortal::ajax_resume` | User owns subscription |
+| `purecart_customer_skip` | `PC_CustomerPortal::ajax_skip` | User owns subscription + allow_skip + skip_limit |
+| `purecart_customer_cancel` | `PC_CustomerPortal::ajax_cancel` | User owns subscription + allow_cancel |
+| `purecart_customer_upgrade` | `PC_CustomerPortal::ajax_upgrade` | User owns subscription + allow_upgrade |
+| `purecart_customer_accept_offer` | `PC_CustomerPortal::ajax_accept_offer` | User owns subscription |
+| `purecart_customer_get_offers` | `PC_CustomerPortal::ajax_get_offers` | User owns subscription |
+
+All handlers call the corresponding `PC_SubscriptionManager` method and return `wp_send_json_success` or `wp_send_json_error`.
+
+---
+
+### Customer 3-Step Cancellation Modal
+
+The cancellation flow matches the admin RetentionFlow but runs client-side in the My Account template:
+
+**Step 1 — Reason selection**
+- AJAX `GET` → `purecart_customer_get_offers` with no reason yet → returns reason list from `_purecart_sub_retention_reasons`
+- Customer selects a reason
+
+**Step 2 — Retention offer**
+- AJAX `GET` → `purecart_customer_get_offers` with `reason` param → returns best matching offer
+- Display offer: discount badge / pause suggestion / skip suggestion / downgrade option / contact link
+- Customer can accept offer (`purecart_customer_accept_offer`) or decline and proceed
+
+**Step 3 — Cancel timing**
+- If offer declined: ask "Cancel now" vs "Cancel at end of period" (pending_cancel)
+- AJAX `POST` → `purecart_customer_cancel` with `{ timing: 'immediate' | 'end_of_period' }`
+
+---
+
+### Early Renewal Checkout Flow
+
+1. Customer clicks "Renew Early"
+2. `PC_CustomerPortal::early_renewal_cart( $subscription_id )` adds a special cart item (early renewal product at subscription price) and redirects to WC checkout
+3. WC checkout processes payment; on `woocommerce_payment_complete` → `PC_SubscriptionManager::complete_early_renewal( $order_id )` → advances `next_payment_at` by one billing interval
+
+---
+
+### My Account Dashboard Widget (optional)
+
+If `purecart_sub_show_dashboard_widget = true` (config option), add a subscription summary card to the WC My Account dashboard:
+
+```php
+add_action( 'woocommerce_account_dashboard', 'PC_CustomerPortal::render_dashboard_widget' );
+```
+
+Shows: count of active subscriptions + next payment date + quick "Manage" link.
+
+---
+
+### Delivery-Type Customer Views
+
+Type-specific content in the delivery panel is always read-only for the customer. Customers cannot change their own tier, reset quotas, or manage LMS enrollment directly — those are admin-only actions exposed via the admin REST API.
+
+Exception: **service/retainer** type optionally shows the deliverable notes to the customer as confirmation of what they will receive that cycle.
+
+---
+
+## Developer Hooks
+
+```php
+// Subscription created from order
+do_action( 'purecart_subscription_created', $subscription_id, $order_id, $product_id );
+
+// Renewal order created (before payment attempt)
+do_action( 'purecart_renewal_order_created', $renewal_order, $subscription_id );
+
+// External (gateway-scheduled) renewal recorded
+do_action( 'purecart_external_renewal_recorded', $renewal_order, $subscription_id );
+
+// After successful renewal payment
+do_action( 'purecart_subscription_renewed', $subscription_id, $order_id, $new_next_payment_at );
+
+// After trial ends and first real payment occurs
+do_action( 'purecart_subscription_trial_ended', $subscription_id );
+
+// When license is extended on renewal
+do_action( 'purecart_license_renewed', $license_id, $new_expires_at );
+
+// After payment fails (before dunning starts)
+do_action( 'purecart_subscription_payment_failed', $subscription_id, $order_id, $retry_count );
+
+// When subscription is suspended
+do_action( 'purecart_subscription_suspended', $subscription_id );
+
+// When subscription is cancelled
+do_action( 'purecart_subscription_cancelled', $subscription_id, $cancelled_by );
+
+// When pending-cancel subscription is finalized
+do_action( 'purecart_subscription_cancellation_finalized', $subscription_id );
+
+// When subscription expires (fixed length)
+do_action( 'purecart_subscription_expired', $subscription_id );
+
+// When subscription is completed (split payment fully paid)
+do_action( 'purecart_subscription_completed', $subscription_id );
+
+// When subscription is paused
+do_action( 'purecart_subscription_paused', $subscription_id, $pause_duration_days );
+
+// When subscription is resumed
+do_action( 'purecart_subscription_resumed', $subscription_id );
+
+// When subscription is skipped
+do_action( 'purecart_subscription_skipped', $subscription_id, $new_next_payment_at );
+
+// When plan is upgraded or downgraded
+do_action( 'purecart_subscription_plan_changed', $subscription_id, $old_product_id, $new_product_id, $proration_amount );
+
+// When early renewal order is created
+do_action( 'purecart_early_renewal_created', $subscription_id, $order_id );
+
+// When a retention offer is accepted
+do_action( 'purecart_retention_offer_accepted', $subscription_id, $offer_type, $offer_data );
+
+// When card expiry warning is sent
+do_action( 'purecart_customer_card_expiring', $subscription_id, $days_until_expiry );
+
+// When SCA reauthorization is required
+do_action( 'purecart_reauth_required', $subscription_id, $renewal_order_id );
+
+// When churn score is updated
+do_action( 'purecart_churn_score_updated', $subscription_id, $old_score, $new_score );
+
+// Filter: block renewal on staging
+apply_filters( 'purecart_process_renewal', true, $subscription_id );
+
+// Filter: dunning schedule (days after failure for each retry)
+apply_filters( 'purecart_dunning_schedule', [ 1, 3, 7, 14 ], $subscription_id );
+
+// Filter: proration amount before charge
+apply_filters( 'purecart_proration_amount', $amount, $subscription_id, $new_product_id );
+
+// Filter: renewal order args before creation
+apply_filters( 'purecart_renewal_order_args', $args, $subscription_id );
+
+// Filter: gateway meta keys copied from subscription to renewal order
+apply_filters( 'purecart_gateway_meta_keys', $default_keys );
+
+// Filter: whether a gateway manages its own billing schedule
+apply_filters( 'purecart_gateway_schedules_payments', $bool, $payment_method, $subscription_id );
+
+// Filter: available retention offers for a subscription
+apply_filters( 'purecart_available_retention_offers', $offers, $subscription_id, $selected_reason );
+
+// Filter: LTV average lifetime months
+apply_filters( 'purecart_sub_avg_lifetime_months', 24 );
+
+// Filter: milo-compatible gateway scheduled payments support check
+apply_filters( 'purecart_gateway_scheduled_payments', $supports, $gateway_id );
+
+// ─── Delivery Type Hooks ───────────────────────────────────────────────────────
+
+// When membership tier is changed by admin
+do_action( 'purecart_membership_tier_changed', $subscription_id, $old_tier, $new_tier );
+
+// When membership grace period has fully expired and role is removed
+do_action( 'purecart_membership_grace_expired', $subscription_id );
+
+// When download quota is reset at the start of a new billing cycle
+do_action( 'purecart_download_quota_reset', $subscription_id, $new_limit );
+
+// When a drip content item is delivered to the subscriber
+do_action( 'purecart_drip_content_delivered', $subscription_id, $file_ids, $next_drip_date );
+
+// When a subscriber is enrolled in LMS courses on activation/renewal
+do_action( 'purecart_course_enrollment_granted', $subscription_id, $user_id, $course_ids, $access_until );
+
+// When LMS course access is revoked on cancellation/expiry
+do_action( 'purecart_course_access_revoked', $subscription_id, $user_id, $course_ids );
+
+// When a service deliverable is marked complete by admin
+do_action( 'purecart_deliverable_completed', $subscription_id, $completed_by, $notes );
+
+// Filter: grace period days for membership cancellation (override per-subscription)
+apply_filters( 'purecart_membership_grace_days', $days, $subscription_id );
+
+// Filter: LMS course IDs to enroll for a subscription (override per-subscription)
+apply_filters( 'purecart_lms_course_ids', $course_ids, $subscription_id, $product_id );
+```
+
+---
+
+## Competitor Feature Matrix (Updated)
+
+| Feature | WC Subscriptions | ArraySubs | Milo | Recurio | YITH | WP Swings | EDD (core) | **PureCart** |
+|---|---|---|---|---|---|---|---|---|
+| WooCommerce native | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | **✅** |
+| Simple subscription products | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | add-on | **✅** |
+| Variable subscription products | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (Pro) | add-on | **✅** |
+| Free trial | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (Pro) | add-on | **✅** |
+| Sign-up fee | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | add-on | **✅** |
+| Mixed cart | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | **✅** |
+| Pause / Resume | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ (Pro) | ❌ | **✅** |
+| Skip renewal | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | **✅** |
+| Pending cancellation | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | **✅** |
+| Resubscribe | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Plan upgrade/downgrade | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Proration (3 modes) | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Early renewal | ✅ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | **✅** |
+| Auto-renewal (Stripe/PayPal) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | **✅** |
+| Gateway-scheduled payment support | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Idempotency guard on renewal | ⚠️ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Zero-total renewal handling | ⚠️ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Staging site block | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Dunning / payment retry | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ (Pro) | ❌ | **✅** |
+| Card expiry warning email | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| SCA reauthorization email | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Retention flow (cancel) | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Retention offer eligibility rules | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Subscribe & Save | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | **✅** |
+| Split / installment payments | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | **✅** |
+| Churn risk scoring | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | **✅** |
+| Customer LTV calculation | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | **✅** |
+| Revenue goals | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | **✅** |
+| Revenue ledger table | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | **✅** |
+| Subscription logs per record | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | **✅** |
+| Renewal reminder emails | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | **✅** |
+| Bulk admin actions | ✅ | ✅ | ❌ | ❌ | ✅ | ❌ | ❌ | **✅** |
+| CSV export | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| GDPR / privacy integration | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ | **✅** |
+| Linked to software license | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | add-on | **✅** |
+| Linked to SaaS account | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Membership delivery (role + tier) | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ (Pro) | ❌ | **✅** |
+| Membership grace period | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ (Pro) | ❌ | **✅** |
+| Digital download quota per cycle | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | **✅** |
+| Drip content delivery | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | add-on | **✅** |
+| LMS course enrollment delivery | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Service / retainer delivery | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Stepped renewal pricing | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Renewal sync to calendar date | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Role assignment on status | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| HPOS compatible | ✅ | ✅ | ✅ | ❌ | ⚠️ | ⚠️ | N/A | **✅** |
+| Action Scheduler (not raw cron) | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | N/A | **✅** |
+
+### Key PureCart Differentiators
+
+1. **License-linked renewals** — renewal automatically extends software license expiry
+2. **SaaS-linked renewals** — renewal re-activates a suspended SaaS account
+3. **Split payments** — installment model with configurable access timing (not found in any other WooCommerce subscription plugin)
+4. **Subscribe & Save** — dual pricing (one-time vs. recurring) on the same product
+5. **Idempotency guard** — prevents double-charging if Action Scheduler retries
+6. **Gateway-scheduled payment detection** — works cleanly with Stripe Billing / WooPayments recurring
+7. **Zero-total renewal** — never routes $0 through a gateway
+8. **Staging block** — prevents accidental billing on dev/staging copies
+9. **Churn risk scoring** — actionable score for every subscription
+10. **Customer LTV + revenue goals** — built-in SaaS-grade analytics
+11. **Retention offer eligibility rules** — sophisticated targeting (subscription age, value, spend, remaining days)
+12. **Card expiry warnings + SCA reauth** — complete payment health coverage
+13. **Revenue ledger table** — separate table for clean MRR/ARR reporting
+14. **Built into PureCart** — no separate plugin install, no compatibility risk with PureCart modules
+15. **Six delivery types** — software, SaaS, membership, digital downloads, LMS courses, and service/retainer all handled by a single subscription engine with type-specific provisioning, lifecycle hooks, and admin actions

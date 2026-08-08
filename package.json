@@ -6,23 +6,23 @@
     "license": "GPL-3.0-or-later",
     "private": true,
     "scripts": {
-        "build":           "wp-scripts build",
-        "start":           "wp-scripts start",
-        "format":          "wp-scripts format ./src",
-        "lint":            "npm run lint:js && npm run lint:css",
-        "lint:js":         "wp-scripts lint-js",
-        "lint:css":        "wp-scripts lint-style",
-        "lint:fix":        "wp-scripts lint-js --fix && wp-scripts lint-style --fix",
-        "lint:pkg-json":   "wp-scripts lint-pkg-json",
+        "build": "wp-scripts build",
+        "start": "wp-scripts start",
+        "format": "wp-scripts format ./src",
+        "lint": "npm run lint:js && npm run lint:css",
+        "lint:js": "wp-scripts lint-js",
+        "lint:css": "wp-scripts lint-style",
+        "lint:fix": "wp-scripts lint-js --fix && wp-scripts lint-style --fix",
+        "lint:pkg-json": "wp-scripts lint-pkg-json",
         "packages-update": "wp-scripts packages-update",
-        "plugin-zip":      "wp-scripts plugin-zip",
-		"update-version": "node update-version-and-changelog.js",
-        "make-pot":        "wp i18n make-pot . languages/purecart.pot --domain=purecart --exclude=node_modules,vendor,tests"
+        "plugin-zip": "wp-scripts plugin-zip",
+        "update-version": "node update-version-and-changelog.js",
+        "make-pot": "wp i18n make-pot . languages/purecart.pot --domain=purecart --exclude=node_modules,vendor,tests"
     },
     "devDependencies": {
+        "@actions/core": "^1.10.0",
         "@tailwindcss/postcss": "^4.0.0",
         "@wordpress/scripts": "^30.23.0",
-        "@actions/core": "^1.10.0",
         "npm-check-updates": "^16.14.20",
         "simple-git": "^3.27.0",
         "tailwindcss": "^4.0.0",
@@ -30,8 +30,10 @@
         "webpack-remove-empty-scripts": "^1.1.1"
     },
     "dependencies": {
+        "@reduxjs/toolkit": "^2.12.0",
         "clsx": "^2.1.1",
         "lucide-react": "^0.563.0",
+        "react-redux": "^9.3.0",
         "react-router-dom": "^7.13.0",
         "recharts": "^2.15.3"
     }
