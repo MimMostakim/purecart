@@ -22,7 +22,7 @@ class Activator {
 	private const DB_VERSION_KEY = 'purecart_db_version';
 
 	/** Current DB schema version. */
-	private const DB_VERSION = '1.1.0';
+	private const DB_VERSION = '1.2.3';
 
 	/** Action Scheduler group for all plugin jobs. */
 	private const AS_GROUP = 'purecart';
@@ -49,6 +49,7 @@ class Activator {
 	public static function deactivate(): void {
 		as_unschedule_all_actions( 'purecart_check_expired_licenses', array(), self::AS_GROUP );
 		as_unschedule_all_actions( 'purecart_process_dunning', array(), self::AS_GROUP );
+		as_unschedule_all_actions( 'purecart_scan_due_renewals', array(), self::AS_GROUP );
 		flush_rewrite_rules();
 	}
 
@@ -156,45 +157,12 @@ class Activator {
         ) $charset;"
 		);
 
-		dbDelta(
-			"CREATE TABLE {$wpdb->prefix}purecart_subscriptions (
-            id               BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-            user_id          BIGINT UNSIGNED NOT NULL DEFAULT 0,
-            product_id       BIGINT UNSIGNED NOT NULL DEFAULT 0,
-            order_id         BIGINT UNSIGNED NOT NULL DEFAULT 0,
-            license_id       BIGINT UNSIGNED NOT NULL DEFAULT 0,
-            status           ENUM('active','trialing','paused','suspended','cancelled','expired','past_due') NOT NULL DEFAULT 'active',
-            billing_interval INT UNSIGNED NOT NULL DEFAULT 1,
-            billing_period   VARCHAR(20)  NOT NULL DEFAULT 'month',
-            recurring_amount DECIMAL(10,2) NOT NULL DEFAULT '0.00',
-            currency         VARCHAR(3)   NOT NULL DEFAULT 'USD',
-            renewal_count    INT UNSIGNED NOT NULL DEFAULT 0,
-            trial_ends_at    DATETIME NULL DEFAULT NULL,
-            next_payment_at  DATETIME NULL DEFAULT NULL,
-            last_payment_at  DATETIME NULL DEFAULT NULL,
-            starts_at        DATETIME NOT NULL,
-            expires_at       DATETIME NULL DEFAULT NULL,
-            paused_at        DATETIME NULL DEFAULT NULL,
-            cancelled_at     DATETIME NULL DEFAULT NULL,
-            PRIMARY KEY  (id),
-            KEY idx_user_id      (user_id),
-            KEY idx_status       (status),
-            KEY idx_next_payment (next_payment_at)
-        ) $charset;"
-		);
-
-		dbDelta(
-			"CREATE TABLE {$wpdb->prefix}purecart_subscription_logs (
-            id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-            subscription_id BIGINT UNSIGNED NOT NULL,
-            event           VARCHAR(64)  NOT NULL DEFAULT '',
-            note            TEXT,
-            created_at      DATETIME NOT NULL,
-            PRIMARY KEY  (id),
-            KEY idx_subscription_id (subscription_id),
-            KEY idx_event           (event)
-        ) $charset;"
-		);
+		// Subscriptions module tables (wp_purecart_subscriptions, _logs, _linked_entities,
+		// _payments, _items, _revenue, _revenue_goals) — owned by Subscriptions\Schema,
+		// per subscription-final-dev-plan.md § 9 Step 1. This supersedes the earlier
+		// minimal purecart_subscriptions / purecart_subscription_logs definitions that
+		// used to be inlined here.
+		\PureCart\Subscriptions\Schema::create_tables();
 
 		dbDelta(
 			"CREATE TABLE {$wpdb->prefix}purecart_saas_accounts (

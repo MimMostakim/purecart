@@ -13,6 +13,7 @@ defined( 'ABSPATH' ) || exit;
 
 use PureCart\Licensing\LicenseGenerator;
 use PureCart\Activator;
+use PureCart\Subscriptions\Module as SubscriptionsModule;
 
 /**
  * Admin panel: menus, product meta boxes, settings.
@@ -29,8 +30,32 @@ class Admin {
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'add_meta_boxes', array( $this, 'meta_boxes' ) );
 		add_action( 'save_post_product', array( $this, 'save_product_meta' ) );
-		add_action( 'admin_init', array( Activator::class, 'maybe_upgrade' ) );
+		add_action( 'admin_init', array( $this, 'maybe_upgrade_db' ) );
 		add_filter( 'plugin_action_links_' . PURECART_BASENAME, array( $this, 'action_links' ) );
+	}
+
+	/**
+	 * Run the DB schema upgrade check, gated to users who can manage the
+	 * site's settings.
+	 *
+	 * dbDelta() itself is idempotent/safe to run repeatedly, so this wasn't a
+	 * data-integrity issue — but `admin_init` fires for anyone who can reach
+	 * any wp-admin screen, not just administrators, and there's no reason to
+	 * let a lower-privileged admin-area visitor trigger a schema migration
+	 * on every page load. Kept as a thin wrapper (rather than adding the
+	 * check inside Activator::maybe_upgrade() itself) so that method stays a
+	 * plain "check version, migrate if stale" utility, reusable from contexts
+	 * that don't run under this hook.
+	 *
+	 * @since 1.0.0
+	 * @return void
+	 */
+	public function maybe_upgrade_db(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		Activator::maybe_upgrade();
 	}
 
 	/**
@@ -67,15 +92,19 @@ class Admin {
 			'purecart-settings',
 			array( $this, 'page_settings' )
 		);
-		// react dashbord
-		add_submenu_page(
-			'purecart-dashboard',
-			__( 'Dashboard', 'purecart' ),
-			__( 'Dashboard', 'purecart' ),
-			'manage_woocommerce',
-			'purecart-react-dashboard',
-			array( $this, 'page_react_dashboard' )
-		);
+		// React app — currently Subscriptions-only (src/app/router/paths.ts scopes every
+		// route under /subscriptions), so the visible label says "Subscriptions", not the
+		// previous generic "Dashboard". Slug kept as-is so existing links don't break.
+		if ( SubscriptionsModule::is_enabled() ) {
+			add_submenu_page(
+				'purecart-dashboard',
+				__( 'Subscriptions', 'purecart' ),
+				__( 'Subscriptions', 'purecart' ),
+				'manage_woocommerce',
+				'purecart-react-dashboard',
+				array( $this, 'page_react_dashboard' )
+			);
+		}
 	}
 
 	/**
@@ -376,20 +405,32 @@ class Admin {
 			update_option( 'purecart_webhook_secret', sanitize_text_field( wp_unslash( $_POST['purecart_webhook_secret'] ?? '' ) ) );
 			update_option( 'purecart_download_expiry_seconds', absint( $_POST['purecart_download_expiry_seconds'] ?? DAY_IN_SECONDS ) );
 			update_option( 'purecart_download_max_count', absint( $_POST['purecart_download_max_count'] ?? 3 ) );
+			update_option( SubscriptionsModule::OPTION_ENABLED, isset( $_POST['purecart_sub_enabled'] ) ? 1 : 0 );
 
 			echo '<div class="notice notice-success"><p>' . esc_html__( 'Settings saved.', 'purecart' ) . '</p></div>';
 		}
 
-		$webhook_url = get_option( 'purecart_saas_webhook_url', '' );
-		$secret      = get_option( 'purecart_webhook_secret', '' );
-		$expiry      = get_option( 'purecart_download_expiry_seconds', DAY_IN_SECONDS );
-		$max_dl      = get_option( 'purecart_download_max_count', 3 );
+		$webhook_url  = get_option( 'purecart_saas_webhook_url', '' );
+		$secret       = get_option( 'purecart_webhook_secret', '' );
+		$expiry       = get_option( 'purecart_download_expiry_seconds', DAY_IN_SECONDS );
+		$max_dl       = get_option( 'purecart_download_max_count', 3 );
+		$sub_enabled  = SubscriptionsModule::is_enabled();
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'PureCart Settings', 'purecart' ); ?></h1>
 			<form method="post">
 				<?php wp_nonce_field( 'purecart_save_settings', 'purecart_settings_nonce' ); ?>
 				<table class="form-table">
+					<tr>
+						<th><label for="purecart_sub_enabled"><?php esc_html_e( 'Subscriptions Module', 'purecart' ); ?></label></th>
+						<td>
+							<label>
+								<input type="checkbox" id="purecart_sub_enabled" name="purecart_sub_enabled" value="1" <?php checked( $sub_enabled ); ?>>
+								<?php esc_html_e( 'Enable recurring subscriptions', 'purecart' ); ?>
+							</label>
+							<p class="description"><?php esc_html_e( 'Disabling this hides the Subscriptions menu and stops the module from loading.', 'purecart' ); ?></p>
+						</td>
+					</tr>
 					<tr>
 						<th><label for="purecart_saas_webhook_url"><?php esc_html_e( 'SaaS Webhook URL', 'purecart' ); ?></label></th>
 						<td><input type="url"      id="purecart_saas_webhook_url"        name="purecart_saas_webhook_url"        value="<?php echo esc_attr( $webhook_url ); ?>" class="regular-text"></td>

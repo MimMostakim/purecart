@@ -16,6 +16,7 @@ use PureCart\Commerce\ProductTypes;
 use PureCart\API\RestApi;
 use PureCart\CustomerDashboard\Dashboard;
 use PureCart\Admin\Admin;
+use PureCart\Subscriptions\Module as SubscriptionsModule;
 
 /**
  * Plugin singleton.
@@ -50,6 +51,7 @@ final class Plugin {
 		new OrderHandler();
 		new RestApi();
 		new Dashboard();
+		new SubscriptionsModule();
 
 		if ( is_admin() ) {
 			new Admin();
