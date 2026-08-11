@@ -137,6 +137,43 @@ class PaymentRepository {
 	}
 
 	/**
+	 * Mark a payment as refunded (feature doc § 21, Refund Policy) — used by
+	 * WebhookHandler (Step 12) when a gateway reports a refund event.
+	 *
+	 * @since 1.0.0
+	 * @param int    $payment_id      Payment row ID.
+	 * @param float  $refunded_amount Amount refunded.
+	 * @param string $reason          Optional refund reason/note.
+	 * @return bool
+	 */
+	public function mark_refunded( int $payment_id, float $refunded_amount, string $reason = '' ): bool {
+		global $wpdb;
+
+		$payment = $this->find( $payment_id );
+		if ( ! $payment ) {
+			return false;
+		}
+
+		$is_partial = $refunded_amount < (float) $payment->amount;
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Refund status update; must be immediate, not cached.
+		$updated = $wpdb->update(
+			$this->table(),
+			array(
+				'status'            => 'refunded',
+				'is_partial_refund' => $is_partial ? 1 : 0,
+				'refunded_amount'   => $refunded_amount,
+				'refund_reason'     => '' !== $reason ? sanitize_textarea_field( $reason ) : null,
+			),
+			array( 'id' => $payment_id ),
+			array( '%s', '%d', '%f', '%s' ),
+			array( '%d' )
+		);
+
+		return false !== $updated;
+	}
+
+	/**
 	 * Full payment history for one subscription, newest first.
 	 *
 	 * @since 1.0.0

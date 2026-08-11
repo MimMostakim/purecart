@@ -108,4 +108,60 @@ class SubscriptionLogRepository {
 			)
 		) ?: array();
 	}
+
+	// -----------------------------------------------------------------------
+	// Reporting aggregates (Step 15)
+	// -----------------------------------------------------------------------
+
+	/**
+	 * How many subscriptions transitioned *into* a given status within a date
+	 * range. The log is the only place point-in-time history exists — the
+	 * subscriptions table holds current state plus a handful of timestamps
+	 * (`cancelled_at`, ...), with no column at all for e.g. when a row
+	 * expired, so churn over a past window can only be counted from here.
+	 *
+	 * @since 1.0.0
+	 * @param string $new_status Status transitioned into (e.g. 'cancelled').
+	 * @param string $start      Inclusive range start (MySQL datetime).
+	 * @param string $end        Inclusive range end (MySQL datetime).
+	 * @return int
+	 */
+	public function count_transitions_to( string $new_status, string $start, string $end ): int {
+		global $wpdb;
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reporting aggregate over a custom table.
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT( DISTINCT subscription_id ) FROM {$this->table()}
+                  WHERE new_status = %s AND created_at >= %s AND created_at <= %s",
+				sanitize_key( $new_status ),
+				$start,
+				$end
+			)
+		);
+	}
+
+	/**
+	 * Subscription IDs that had already ended (cancelled or expired) before a
+	 * given moment — used to reconstruct "how many were active at the start of
+	 * the period", the denominator of the churn-rate formula (§ 8).
+	 *
+	 * @since 1.0.0
+	 * @param string $before Exclusive cutoff (MySQL datetime).
+	 * @return int[]
+	 */
+	public function ended_before( string $before ): array {
+		global $wpdb;
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reporting aggregate over a custom table.
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT DISTINCT subscription_id FROM {$this->table()}
+                  WHERE new_status IN ( 'cancelled', 'expired' ) AND created_at < %s",
+				$before
+			)
+		);
+
+		return array_map( 'intval', (array) $ids );
+	}
 }

@@ -50,6 +50,12 @@ class SubscriptionProduct {
 		add_action( 'woocommerce_product_data_panels', array( $this, 'render_data_panel' ) );
 		add_action( 'woocommerce_process_product_meta', array( $this, 'save_meta' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_toggle_script' ) );
+
+		// Step 14 additions — see save_meta()'s price-sync comment and the
+		// class docblock note above adjust_cart_prices() for why these exist.
+		add_action( 'woocommerce_before_calculate_totals', array( $this, 'adjust_cart_prices' ) );
+		add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'validate_add_to_cart' ), 10, 2 );
+		add_filter( 'woocommerce_available_payment_gateways', array( $this, 'filter_gateways_for_subscriptions' ) );
 	}
 
 	/**
@@ -458,6 +464,22 @@ class SubscriptionProduct {
 			$ids = array_filter( array_map( 'absint', explode( ',', wp_unslash( $_POST['_purecart_sub_lms_course_ids_display'] ) ) ) );
 			update_post_meta( $post_id, '_purecart_sub_lms_course_ids', wp_json_encode( array_values( $ids ) ) );
 		}
+
+		// Gap found during Step 14: this method only ever wrote our own
+		// `_purecart_sub_price`/`_purecart_sub_signup_fee` meta — it never
+		// touched WooCommerce's own `_price`/`_regular_price` meta, which is
+		// what checkout actually charges. Without this, a subscription
+		// product's checkout price was whatever the (unrelated, unused)
+		// core WC price fields happened to hold — usually empty, i.e. free.
+		// Synced here so the product page and a plain cart show a sane base
+		// price; adjust_cart_prices() below corrects it further at checkout
+		// time for trial/renewal-sync cases that can't be known until then.
+		$recurring_price = (float) wc_format_decimal( get_post_meta( $post_id, '_purecart_sub_price', true ) );
+		$signup_fee      = (float) wc_format_decimal( get_post_meta( $post_id, '_purecart_sub_signup_fee', true ) );
+		$base_price      = wc_format_decimal( $recurring_price + $signup_fee );
+
+		update_post_meta( $post_id, '_price', $base_price );
+		update_post_meta( $post_id, '_regular_price', $base_price );
 	}
 
 	/**
@@ -516,5 +538,130 @@ class SubscriptionProduct {
 		} );
 		</script>
 		<?php
+	}
+
+	// -----------------------------------------------------------------------
+	// Cart/checkout integration (Step 14 gap-fill — feature doc § 4/§ 20)
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Set each subscription cart item's price to the correct *initial*
+	 * charge (trial waives the recurring portion, renewal sync prorates it —
+	 * see RenewalSync::calculate_initial_price()) right before WooCommerce
+	 * totals the cart. Idiomatic WC pattern for dynamic per-cart-item pricing
+	 * (the same hook membership/bulk-discount plugins use) — no cart-totals
+	 * filter chain to duplicate, WC picks the adjusted price up natively.
+	 *
+	 * @since 1.0.0
+	 * @param \WC_Cart $cart Current cart, passed by WooCommerce.
+	 * @return void
+	 */
+	public function adjust_cart_prices( \WC_Cart $cart ): void {
+		if ( is_admin() && ! defined( 'DOING_AJAX' ) ) {
+			return;
+		}
+
+		foreach ( $cart->get_cart() as $cart_item ) {
+			$product = $cart_item['data'] ?? null;
+			if ( ! $product instanceof \WC_Product || self::TYPE !== $product->get_type() ) {
+				continue;
+			}
+
+			$product->set_price( RenewalSync::calculate_initial_price( $product ) );
+		}
+	}
+
+	/**
+	 * Mixed-cart validation rules (feature doc § 20):
+	 *  - blocks a second subscription to the *same* product a customer is
+	 *    already subscribed to (any not-yet-ended status);
+	 *  - optionally (site setting `purecart_sub_allow_multiple_subscriptions`,
+	 *    default true) blocks subscribing to a *different* product while
+	 *    another subscription is active.
+	 * Deliberately silent on guests (matches SubscriptionManager's own
+	 * guest-checkout gap, Step 5 — nothing to check against yet) and on
+	 * mixed subscription+non-subscription carts, which the doc explicitly
+	 * allows and needs no validation at all.
+	 *
+	 * @since 1.0.0
+	 * @param bool $passed     Whether add-to-cart should proceed so far.
+	 * @param int  $product_id Product being added.
+	 * @return bool
+	 */
+	public function validate_add_to_cart( bool $passed, int $product_id ): bool {
+		if ( ! $passed || ! is_user_logged_in() ) {
+			return $passed;
+		}
+
+		$product = wc_get_product( $product_id );
+		if ( ! $product || self::TYPE !== $product->get_type() ) {
+			return $passed;
+		}
+
+		$open_statuses = array( 'active', 'trialing', 'past_due', 'paused', 'pending_cancel' );
+		$existing      = ( new SubscriptionRepository() )->find_by_user( get_current_user_id() );
+
+		foreach ( $existing as $subscription ) {
+			if ( ! in_array( $subscription->status, $open_statuses, true ) ) {
+				continue;
+			}
+
+			if ( (int) $subscription->product_id === $product_id ) {
+				wc_add_notice( __( "You're already subscribed to this plan.", 'purecart' ), 'error' );
+				return false;
+			}
+		}
+
+		if ( ! (bool) get_option( 'purecart_sub_allow_multiple_subscriptions', true ) ) {
+			foreach ( $existing as $subscription ) {
+				if ( in_array( $subscription->status, $open_statuses, true ) && (int) $subscription->product_id !== $product_id ) {
+					wc_add_notice( __( 'You can only have one active subscription at a time.', 'purecart' ), 'error' );
+					return false;
+				}
+			}
+		}
+
+		return $passed;
+	}
+
+	/**
+	 * Hide gateways that can't tokenize a payment method (COD, cheque, bank
+	 * transfer) from checkout whenever the cart contains a subscription —
+	 * feature doc § 20's "gateway filtering". Left alone in wp-admin so an
+	 * order can still be created/edited manually there.
+	 *
+	 * @since 1.0.0
+	 * @param array<string, \WC_Payment_Gateway> $gateways Available gateways.
+	 * @return array<string, \WC_Payment_Gateway>
+	 */
+	public function filter_gateways_for_subscriptions( array $gateways ): array {
+		if ( is_admin() && ! wp_doing_ajax() ) {
+			return $gateways;
+		}
+
+		if ( ! function_exists( 'WC' ) || ! WC()->cart || ! $this->cart_has_subscription() ) {
+			return $gateways;
+		}
+
+		foreach ( array( 'cod', 'cheque', 'bacs' ) as $non_tokenizing_gateway ) {
+			unset( $gateways[ $non_tokenizing_gateway ] );
+		}
+
+		return $gateways;
+	}
+
+	/**
+	 * @since 1.0.0
+	 * @return bool
+	 */
+	private function cart_has_subscription(): bool {
+		foreach ( WC()->cart->get_cart() as $cart_item ) {
+			$product = $cart_item['data'] ?? null;
+			if ( $product instanceof \WC_Product && self::TYPE === $product->get_type() ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 }

@@ -137,7 +137,23 @@ class SubscriptionManager {
 		$status = $trial_eligible ? 'trialing' : 'active';
 
 		$trial_ends_at = $trial_eligible ? $this->add_interval( $now, $trial_length, $trial_period ) : null;
-		$next_payment_at = $trial_eligible ? $trial_ends_at : $this->add_interval( $now, $interval, $period );
+
+		$default_next_payment_at = $trial_eligible ? $trial_ends_at : $this->add_interval( $now, $interval, $period );
+
+		/**
+		 * The subscription's first `next_payment_at`. Default is the trial end
+		 * date (if trialing) or now + one billing interval. Step 14's
+		 * RenewalSync hooks this to align it to a fixed calendar day instead,
+		 * when `purecart_sub_renewal_sync` is enabled — the same
+		 * override-a-default-via-filter pattern as `purecart_should_activate_delivery`
+		 * (Step 11) and `purecart_renewal_amount` (Step 9).
+		 *
+		 * @since 1.0.0
+		 * @param string $default_next_payment_at Trial end date, or now + one interval.
+		 * @param int    $product_id              Subscription product ID.
+		 * @param string $now                      `current_time('mysql')` at creation time.
+		 */
+		$next_payment_at = apply_filters( 'purecart_initial_next_payment_at', $default_next_payment_at, $product_id, $now );
 		$max_length_at   = $length > 0 ? $this->add_interval( $now, $length, $length_period ) : null;
 
 		$subscription = $this->subscriptions->create(
@@ -167,17 +183,29 @@ class SubscriptionManager {
 			update_user_meta( $user_id, '_purecart_trial_used_' . $product_id, 1 );
 		}
 
-		$linked = DeliveryManager::activate(
-			array(
-				'order_id'      => $order_id,
-				'user_id'       => $user_id,
-				'product_id'    => $product_id,
-				'delivery_type' => $delivery_type,
-			)
+		$activation_data = array(
+			'order_id'      => $order_id,
+			'user_id'       => $user_id,
+			'product_id'    => $product_id,
+			'delivery_type' => $delivery_type,
 		);
 
-		if ( ! empty( array_filter( $linked ) ) ) {
-			$this->subscriptions->update( (int) $subscription->id, $linked );
+		/**
+		 * Whether to provision delivery access right now. Default true — Step 11's
+		 * SplitPaymentManager returns false here when the product's
+		 * `_purecart_access_timing` is `after_full_payment`, so a split-payment
+		 * subscription doesn't get access until its final installment.
+		 *
+		 * @since 1.0.0
+		 * @param bool                 $should_activate Whether to activate now. Default true.
+		 * @param array<string, mixed> $activation_data Data that would be passed to DeliveryManager::activate().
+		 */
+		if ( apply_filters( 'purecart_should_activate_delivery', true, $activation_data ) ) {
+			$linked = DeliveryManager::activate( $activation_data );
+
+			if ( ! empty( array_filter( $linked ) ) ) {
+				$this->subscriptions->update( (int) $subscription->id, $linked );
+			}
 		}
 
 		$this->logs->log(
@@ -362,7 +390,7 @@ class SubscriptionManager {
 			);
 
 			if ( $updated ) {
-				DeliveryManager::deactivate( (array) $subscription );
+				DeliveryManager::deactivate( (array) $subscription, DeliveryManager::REASON_CANCELLED );
 				$this->log_transition( $subscription_id, $subscription->status, 'cancelled', 'cancelled', $reason );
 			}
 
@@ -417,7 +445,7 @@ class SubscriptionManager {
 		);
 
 		if ( $updated ) {
-			DeliveryManager::deactivate( (array) $subscription );
+			DeliveryManager::deactivate( (array) $subscription, DeliveryManager::REASON_CANCELLED );
 			$this->log_transition( $subscription_id, 'pending_cancel', 'cancelled', 'cancelled' );
 		}
 	}
@@ -444,7 +472,7 @@ class SubscriptionManager {
 		$updated = $this->subscriptions->update( $subscription_id, array( 'status' => 'expired' ) );
 
 		if ( $updated ) {
-			DeliveryManager::deactivate( (array) $subscription );
+			DeliveryManager::deactivate( (array) $subscription, DeliveryManager::REASON_EXPIRED );
 			$this->log_transition( $subscription_id, $subscription->status, 'expired', 'expired' );
 		}
 
@@ -502,6 +530,7 @@ class SubscriptionManager {
 
 			DeliveryManager::reactivate( (array) $subscription );
 			$this->log_transition( $subscription_id, $subscription->status, 'active', 'resubscribed', 'same_record' );
+			do_action( 'purecart_subscription_resubscribed', $subscription_id );
 
 			return $this->subscriptions->find( $subscription_id );
 		}
@@ -539,6 +568,10 @@ class SubscriptionManager {
 			array( 'note' => 'New record linked via previous_subscription_id=' . $subscription->id )
 		);
 		do_action( 'purecart_subscription_activated', (int) $new->id );
+		// New in Step 13 — SubscriptionEmail's "Resubscription Confirmed" listens
+		// here rather than on purecart_subscription_activated, so it doesn't also
+		// fire (incorrectly) for every brand-new, never-cancelled subscription.
+		do_action( 'purecart_subscription_resubscribed', (int) $new->id );
 
 		return $this->subscriptions->find( (int) $new->id );
 	}

@@ -66,6 +66,8 @@ class SubscriptionRepository {
 		'access_end_date'          => '%s',
 		'step_price'               => '%f',
 		'step_after'               => '%d',
+		'discount_percent'             => '%f',
+		'discount_renewals_remaining'  => '%d',
 		'churn_risk_score'         => '%d',
 		'customer_ltv'             => '%f',
 		'pending_switch_product'   => '%d',
@@ -276,6 +278,31 @@ class SubscriptionRepository {
 	}
 
 	/**
+	 * Paused subscriptions whose pause_end_date has arrived — due for
+	 * auto-resume. Gap found during Step 9: a retention "pause offer" is
+	 * meaningless if nothing ever resumes it automatically, and no scan for
+	 * this existed (RND's "Auto-Resume (scheduled via Action Scheduler when
+	 * pause_end_date reached)" flow was never built in Step 5).
+	 *
+	 * @since 1.0.0
+	 * @return array<int, object>
+	 */
+	public function find_expired_pauses(): array {
+		global $wpdb;
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Polled by RenewalEngine's hourly scan; must never miss a just-reached resume date.
+		return $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$this->table()}
+                  WHERE status = 'paused'
+                    AND pause_end_date IS NOT NULL
+                    AND pause_end_date <= %s",
+				current_time( 'mysql' )
+			)
+		) ?: array();
+	}
+
+	/**
 	 * Subscriptions due for a renewal attempt right now.
 	 *
 	 * Matches trialing/active subscriptions whose next_payment_at has arrived.
@@ -299,5 +326,126 @@ class SubscriptionRepository {
 				current_time( 'mysql' )
 			)
 		) ?: array();
+	}
+
+	// -----------------------------------------------------------------------
+	// Reporting aggregates (Step 15)
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Count of subscriptions per status, as `status => count`.
+	 *
+	 * @since 1.0.0
+	 * @return array<string, int>
+	 */
+	public function count_by_status(): array {
+		global $wpdb;
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reporting aggregate; the dashboard must reflect current state.
+		$rows = $wpdb->get_results( "SELECT status, COUNT(*) AS total FROM {$this->table()} GROUP BY status" );
+
+		$counts = array();
+		foreach ( (array) $rows as $row ) {
+			$counts[ (string) $row->status ] = (int) $row->total;
+		}
+
+		return $counts;
+	}
+
+	/**
+	 * Only the columns MRR needs, for every subscription in a given status.
+	 *
+	 * Deliberately not `find_by_status()` + full rows: MRR sums across every
+	 * active subscription on the site, and pulling ~50 columns per row (with
+	 * addresses and JSON blobs) to read three of them is wasteful at the point
+	 * where a store is big enough for this number to matter.
+	 *
+	 * @since 1.0.0
+	 * @param string $status Subscription status.
+	 * @return array<int, object> Rows of { user_id, recurring_amount, billing_interval, billing_period }.
+	 */
+	public function billing_rows_by_status( string $status ): array {
+		global $wpdb;
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reporting aggregate; the dashboard must reflect current state.
+		return $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT user_id, recurring_amount, billing_interval, billing_period
+                   FROM {$this->table()} WHERE status = %s",
+				$status
+			)
+		) ?: array();
+	}
+
+	/**
+	 * Subscriptions that started before a given moment, as
+	 * `id => monthly-equivalent inputs`. Feeds the churn-rate denominator
+	 * (§ 8: "active at month start") together with
+	 * SubscriptionLogRepository::ended_before().
+	 *
+	 * @since 1.0.0
+	 * @param string $before Exclusive cutoff (MySQL datetime).
+	 * @return array<int, object> Rows of { id, user_id, recurring_amount, billing_interval, billing_period }.
+	 */
+	public function started_before( string $before ): array {
+		global $wpdb;
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reporting aggregate over a custom table.
+		return $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT id, user_id, recurring_amount, billing_interval, billing_period
+                   FROM {$this->table()}
+                  WHERE starts_at IS NOT NULL AND starts_at < %s",
+				$before
+			)
+		) ?: array();
+	}
+
+	/**
+	 * How many subscriptions were created within a date range — the
+	 * trial-conversion denominator when filtered to trials.
+	 *
+	 * @since 1.0.0
+	 * @param string      $start       Inclusive range start (MySQL datetime).
+	 * @param string      $end         Inclusive range end (MySQL datetime).
+	 * @param bool        $trials_only Count only subscriptions that began with a trial.
+	 * @return int
+	 */
+	public function count_created_between( string $start, string $end, bool $trials_only = false ): int {
+		global $wpdb;
+
+		$trial_clause = $trials_only ? ' AND trial_ends_at IS NOT NULL' : '';
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $trial_clause is a fixed internal string, never user input; all values are prepared.
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$this->table()}
+                  WHERE starts_at >= %s AND starts_at <= %s" . $trial_clause,
+				$start,
+				$end
+			)
+		);
+	}
+
+	/**
+	 * Every subscription joined to nothing else, for CSV export. Ordered
+	 * oldest-first so an export is stable across runs.
+	 *
+	 * @since 1.0.0
+	 * @param string|null $status Optional status filter; null = all.
+	 * @return array<int, object>
+	 */
+	public function find_all( ?string $status = null ): array {
+		global $wpdb;
+
+		if ( null !== $status ) {
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Export query over a custom table.
+			return $wpdb->get_results(
+				$wpdb->prepare( "SELECT * FROM {$this->table()} WHERE status = %s ORDER BY id ASC", $status )
+			) ?: array();
+		}
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Export query over a custom table.
+		return $wpdb->get_results( "SELECT * FROM {$this->table()} ORDER BY id ASC" ) ?: array();
 	}
 }

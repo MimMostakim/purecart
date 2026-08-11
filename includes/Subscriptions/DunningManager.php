@@ -163,6 +163,9 @@ class DunningManager {
 		$timestamp = time() + ( $days * DAY_IN_SECONDS );
 
 		as_schedule_single_action( $timestamp, self::RETRY_HOOK, array( $subscription_id, $attempt_index ), self::AS_GROUP );
+
+		// New in Step 13 — SubscriptionEmail's "Payment Retry Scheduled" listens here.
+		do_action( 'purecart_dunning_retry_scheduled', $subscription_id, $timestamp );
 	}
 
 	/**
@@ -183,6 +186,11 @@ class DunningManager {
 		}
 
 		$this->logs->log( $subscription_id, 'dunning_retry_failed', array( 'note' => 'attempt ' . ( $attempt_index + 1 ) ) );
+
+		// New in Step 13 — SubscriptionEmail's "Overdue Notice" listens here
+		// (RND: "Day N: Retry ... Failure -> Send overdue reminder email").
+		do_action( 'purecart_dunning_retry_failed', $subscription_id, $attempt_index );
+
 		$this->schedule_next_retry( $subscription_id, $attempt_index + 1 );
 	}
 
@@ -264,7 +272,7 @@ class DunningManager {
 			)
 		);
 
-		DeliveryManager::deactivate( (array) $subscription );
+		DeliveryManager::deactivate( (array) $subscription, DeliveryManager::REASON_SUSPENDED );
 
 		$this->logs->log(
 			(int) $subscription->id,
@@ -294,7 +302,12 @@ class DunningManager {
 			)
 		);
 
-		DeliveryManager::deactivate( (array) $subscription );
+		// REASON_CANCELLED, not REASON_SUSPENDED: suspend() already ran for this
+		// subscription and left the license/account suspended, so access is
+		// already off. This transition only makes that terminal — it must not
+		// additionally claw back the period the customer *did* pay for before
+		// they stopped paying, which is exactly what REASON_CANCELLED preserves.
+		DeliveryManager::deactivate( (array) $subscription, DeliveryManager::REASON_CANCELLED );
 
 		$this->logs->log(
 			(int) $subscription->id,

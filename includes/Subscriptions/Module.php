@@ -51,14 +51,31 @@ class Module {
 		add_filter( 'purecart_subscription_delivery_handlers', array( $this, 'register_native_delivery_handlers' ) );
 
 		new SubscriptionProduct();
-		new SubscriptionManager();
+		$manager = new SubscriptionManager();
 		new ChurnScorer();
+		$retention = new RetentionFlow();
+		new SplitPaymentManager();
+		new SubscriptionEmail();
+		new RoleManager();
+		new RenewalSync();
+		new SubscriptionCoupon();
+		// Listens for purecart_subscription_renewed to fill the recognized-
+		// revenue ledger (Step 15). SubscriptionReport itself is constructed
+		// where it's used (RestController) — it registers no hooks.
+		new RevenueRepository();
+		new SubscriptionExport();
 
-		// Shared, not a second `new RenewalEngine()` inside DunningManager —
-		// a second instance would register the scan/process Action Scheduler
-		// hooks a second time and double-run every renewal.
+		// Every instance below is constructed exactly once and shared with
+		// whatever else needs it (RestController, WebhookHandler) — several of
+		// these classes (SubscriptionManager above, RenewalEngine, DunningManager)
+		// register their own hooks in their constructors; a second `new` per
+		// consumer would double-register those and double-run every renewal.
 		$renewal_engine = new RenewalEngine();
-		new DunningManager( $renewal_engine );
+		$dunning        = new DunningManager( $renewal_engine );
+		$plan_upgrade   = new PlanUpgrade( $renewal_engine );
+		$webhooks       = new WebhookHandler( $renewal_engine );
+
+		new RestController( $manager, $retention, $renewal_engine, $dunning, $plan_upgrade, $webhooks );
 	}
 
 	/**

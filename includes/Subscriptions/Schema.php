@@ -130,6 +130,8 @@ class Schema {
             access_end_date         DATETIME NULL,
             step_price              DECIMAL(10,2) NULL,
             step_after              INT UNSIGNED NULL,
+            discount_percent            DECIMAL(5,2) NULL,
+            discount_renewals_remaining SMALLINT UNSIGNED NULL,
             churn_risk_score        TINYINT UNSIGNED DEFAULT 0,
             customer_ltv            DECIMAL(10,2) DEFAULT 0.00,
             pending_switch_product  BIGINT UNSIGNED NULL,

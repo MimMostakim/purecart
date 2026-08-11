@@ -22,7 +22,7 @@ class Activator {
 	private const DB_VERSION_KEY = 'purecart_db_version';
 
 	/** Current DB schema version. */
-	private const DB_VERSION = '1.2.3';
+	private const DB_VERSION = '1.2.4';
 
 	/** Action Scheduler group for all plugin jobs. */
 	private const AS_GROUP = 'purecart';

@@ -407,14 +407,29 @@ class Admin {
 			update_option( 'purecart_download_max_count', absint( $_POST['purecart_download_max_count'] ?? 3 ) );
 			update_option( SubscriptionsModule::OPTION_ENABLED, isset( $_POST['purecart_sub_enabled'] ) ? 1 : 0 );
 
+			// Subscriptions Step 14 (RoleManager) reads these three as plain
+			// get_option() values — added here, on the one settings page that
+			// already exists, rather than waiting on the customer-portal/admin
+			// SPA (out of scope for this backend work) so they're actually
+			// configurable in the meantime. '' = role untouched at that
+			// transition, same as RoleManager's own default.
+			foreach ( array( 'purecart_sub_trial_role', 'purecart_sub_active_role', 'purecart_sub_cancelled_role' ) as $role_option ) {
+				$submitted_role = sanitize_key( wp_unslash( $_POST[ $role_option ] ?? '' ) );
+				update_option( $role_option, array_key_exists( $submitted_role, get_editable_roles() ) ? $submitted_role : '' );
+			}
+
 			echo '<div class="notice notice-success"><p>' . esc_html__( 'Settings saved.', 'purecart' ) . '</p></div>';
 		}
 
-		$webhook_url  = get_option( 'purecart_saas_webhook_url', '' );
-		$secret       = get_option( 'purecart_webhook_secret', '' );
-		$expiry       = get_option( 'purecart_download_expiry_seconds', DAY_IN_SECONDS );
-		$max_dl       = get_option( 'purecart_download_max_count', 3 );
-		$sub_enabled  = SubscriptionsModule::is_enabled();
+		$webhook_url   = get_option( 'purecart_saas_webhook_url', '' );
+		$secret        = get_option( 'purecart_webhook_secret', '' );
+		$expiry        = get_option( 'purecart_download_expiry_seconds', DAY_IN_SECONDS );
+		$max_dl        = get_option( 'purecart_download_max_count', 3 );
+		$sub_enabled   = SubscriptionsModule::is_enabled();
+		$trial_role     = get_option( 'purecart_sub_trial_role', '' );
+		$active_role    = get_option( 'purecart_sub_active_role', '' );
+		$cancelled_role = get_option( 'purecart_sub_cancelled_role', '' );
+		$editable_roles = get_editable_roles();
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'PureCart Settings', 'purecart' ); ?></h1>
@@ -447,6 +462,45 @@ class Admin {
 						<th><label for="purecart_download_max_count"><?php esc_html_e( 'Max Downloads per Token', 'purecart' ); ?></label></th>
 						<td><input type="number"   id="purecart_download_max_count"      name="purecart_download_max_count"      value="<?php echo esc_attr( $max_dl ); ?>"        class="small-text" min="1"></td>
 					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Subscription Roles', 'purecart' ); ?></th>
+						<td>
+							<?php
+							$role_fields = array(
+								'purecart_sub_trial_role'     => array( __( 'Trial role', 'purecart' ), $trial_role ),
+								'purecart_sub_active_role'    => array( __( 'Active role', 'purecart' ), $active_role ),
+								'purecart_sub_cancelled_role' => array( __( 'Cancelled role', 'purecart' ), $cancelled_role ),
+							);
+							foreach ( $role_fields as $option_name => list( $label, $current_value ) ) :
+								?>
+								<p>
+									<label for="<?php echo esc_attr( $option_name ); ?>"><?php echo esc_html( $label ); ?></label><br>
+									<select id="<?php echo esc_attr( $option_name ); ?>" name="<?php echo esc_attr( $option_name ); ?>">
+										<option value=""><?php esc_html_e( '— None (leave role unchanged) —', 'purecart' ); ?></option>
+										<?php foreach ( $editable_roles as $role_slug => $role_data ) : ?>
+											<option value="<?php echo esc_attr( $role_slug ); ?>" <?php selected( $current_value, $role_slug ); ?>>
+												<?php echo esc_html( translate_user_role( $role_data['name'] ) ); ?>
+											</option>
+										<?php endforeach; ?>
+									</select>
+								</p>
+								<?php
+							endforeach;
+							?>
+							<p class="description"><?php esc_html_e( 'Assigned/removed automatically as a customer\'s subscription goes trialing -> active -> cancelled. Leave any of these blank to not touch roles at that transition.', 'purecart' ); ?></p>
+						</td>
+					</tr>
+					<?php if ( SubscriptionsModule::is_enabled() ) : ?>
+					<tr>
+						<th><?php esc_html_e( 'Export Subscriptions', 'purecart' ); ?></th>
+						<td>
+							<a href="<?php echo esc_url( \PureCart\Subscriptions\SubscriptionExport::download_url() ); ?>" class="button">
+								<?php esc_html_e( 'Download CSV', 'purecart' ); ?>
+							</a>
+							<p class="description"><?php esc_html_e( 'Every subscription, with customer, plan, billing, churn score and LTV columns.', 'purecart' ); ?></p>
+						</td>
+					</tr>
+					<?php endif; ?>
 				</table>
 				<?php submit_button(); ?>
 			</form>

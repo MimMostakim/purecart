@@ -248,7 +248,7 @@ class ChurnScorer {
 	 * @return void
 	 */
 	private function recalculate_ltv( object $subscription ): void {
-		$monthly_equivalent = $this->to_monthly_equivalent(
+		$monthly_equivalent = self::to_monthly_equivalent(
 			(float) $subscription->recurring_amount,
 			(int) $subscription->billing_interval,
 			(string) $subscription->billing_period
@@ -263,13 +263,20 @@ class ChurnScorer {
 	/**
 	 * Normalize a recurring amount to its monthly-equivalent rate.
 	 *
+	 * Public static as of Step 15: SubscriptionReport's MRR figure is defined
+	 * (feature doc § 8) as "sum of normalized monthly-equivalent recurring
+	 * revenue across active subs" — the exact same normalization this class
+	 * already does for LTV. Shared rather than reimplemented so MRR and LTV
+	 * can never drift apart, same reasoning as BillingClock's extraction in
+	 * Step 6.
+	 *
 	 * @since 1.0.0
 	 * @param float  $amount   Recurring amount per billing_interval.
 	 * @param int    $interval Billing interval count.
 	 * @param string $period   One of 'day', 'week', 'month', 'year'.
 	 * @return float
 	 */
-	private function to_monthly_equivalent( float $amount, int $interval, string $period ): float {
+	public static function to_monthly_equivalent( float $amount, int $interval, string $period ): float {
 		$interval = max( 1, $interval );
 
 		switch ( $period ) {

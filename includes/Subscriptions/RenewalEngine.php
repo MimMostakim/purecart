@@ -106,6 +106,27 @@ class RenewalEngine {
 
 			as_schedule_single_action( time(), self::PROCESS_HOOK, array( $subscription_id ), self::AS_GROUP );
 		}
+
+		$this->resume_expired_pauses();
+	}
+
+	/**
+	 * Auto-resume paused subscriptions whose pause_end_date has arrived.
+	 *
+	 * Gap found during Step 9 (RetentionFlow's "pause" offer would otherwise
+	 * pause a subscription forever, since RND's "Auto-Resume" flow was never
+	 * built back in Step 5) — piggybacked on this class's existing hourly
+	 * scan rather than adding a third recurring job.
+	 *
+	 * @since 1.0.0
+	 * @return void
+	 */
+	private function resume_expired_pauses(): void {
+		$manager = new SubscriptionManager();
+
+		foreach ( $this->subscriptions->find_expired_pauses() as $subscription ) {
+			$manager->resume( (int) $subscription->id );
+		}
 	}
 
 	// -----------------------------------------------------------------------
@@ -171,6 +192,13 @@ class RenewalEngine {
 			// waits for that gateway's webhook to call record_external_renewal().
 			return;
 		}
+
+		// Apply any pending plan switch (RetentionFlow's downgrade offer, Step 9)
+		// *before* computing the charge, so this cycle bills at the new plan's
+		// rate. This is a minimal preview of Step 10's PlanUpgrade scope — just
+		// enough to satisfy this step's own checklist ("accepted downgrade
+		// applies at next renewal") — not the full 3-mode proration system.
+		$subscription = $this->maybe_apply_pending_switch( $subscription );
 
 		$amount = $this->renewal_amount( $subscription );
 
@@ -284,7 +312,9 @@ class RenewalEngine {
 	}
 
 	/**
-	 * The amount due this cycle, applying stepped pricing if configured and reached.
+	 * The amount due this cycle, applying stepped pricing if configured and
+	 * reached, then letting other modules adjust it (RetentionFlow's active
+	 * discount, Step 9).
 	 *
 	 * @since 1.0.0
 	 * @param object $subscription Subscription row.
@@ -297,7 +327,71 @@ class RenewalEngine {
 			$amount = (float) $subscription->step_price;
 		}
 
-		return $amount;
+		/**
+		 * Filters the computed renewal amount before it's charged — e.g.
+		 * RetentionFlow (Step 9) reduces it while an accepted discount offer's
+		 * `discount_renewals_remaining` counter hasn't yet run out.
+		 *
+		 * @since 1.0.0
+		 * @param float  $amount       Amount computed so far.
+		 * @param object $subscription Subscription row.
+		 */
+		return (float) apply_filters( 'purecart_renewal_amount', $amount, $subscription );
+	}
+
+	/**
+	 * Apply a scheduled plan switch (RetentionFlow's downgrade-as-retention-offer,
+	 * § 6) if one is pending, before this cycle's charge is computed.
+	 *
+	 * Minimal on purpose: swaps product_id/recurring_amount/billing_interval/
+	 * billing_period to the new product's configuration with no proration —
+	 * correct for the downgrade-offer flow specifically, since that flow is
+	 * documented as "no immediate change, applies fully at next renewal" (i.e.
+	 * inherently the `apply_at_renewal` mode). The full 3-mode proration system
+	 * (`prorate_immediately` / `apply_at_renewal` / `no_proration`, for
+	 * customer-initiated upgrades/downgrades generally) is Step 10's job.
+	 *
+	 * @since 1.0.0
+	 * @param object $subscription Subscription row.
+	 * @return object The subscription row, refreshed if a switch was applied.
+	 */
+	private function maybe_apply_pending_switch( object $subscription ): object {
+		if ( empty( $subscription->pending_switch_product ) ) {
+			return $subscription;
+		}
+
+		$new_product = wc_get_product( (int) $subscription->pending_switch_product );
+
+		if ( ! $new_product ) {
+			// Configured product no longer exists — clear the pending switch
+			// rather than trying (and failing) to apply it every cycle forever.
+			$this->subscriptions->update( (int) $subscription->id, array( 'pending_switch_product' => null, 'pending_switch_type' => null ) );
+			return $this->subscriptions->find( (int) $subscription->id ) ?? $subscription;
+		}
+
+		$switch_type = (string) $subscription->pending_switch_type;
+
+		$this->subscriptions->update(
+			(int) $subscription->id,
+			array(
+				'product_id'             => $new_product->get_id(),
+				'recurring_amount'       => (float) wc_format_decimal( $new_product->get_meta( '_purecart_sub_price' ) ),
+				'billing_interval'       => max( 1, (int) $new_product->get_meta( '_purecart_sub_interval' ) ),
+				'billing_period'         => $new_product->get_meta( '_purecart_sub_period' ) ?: $subscription->billing_period,
+				'pending_switch_product' => null,
+				'pending_switch_type'    => null,
+			)
+		);
+
+		$this->logs->log(
+			(int) $subscription->id,
+			'plan_switched',
+			array( 'note' => "switched to product {$new_product->get_id()} ({$switch_type})" )
+		);
+
+		do_action( 'purecart_subscription_plan_changed', (int) $subscription->id );
+
+		return $this->subscriptions->find( (int) $subscription->id ) ?? $subscription;
 	}
 
 	// -----------------------------------------------------------------------
@@ -321,23 +415,105 @@ class RenewalEngine {
 			return false;
 		}
 
+		$attempt = $this->attempt_gateway_charge( $subscription, $order );
+
+		if ( $attempt['success'] ) {
+			$this->complete_renewal( $subscription, $order, 'charged' );
+			return true;
+		}
+
+		$this->mark_failed( $subscription, $order, $attempt['reason'] );
+		return false;
+	}
+
+	/**
+	 * Charge an arbitrary one-off amount via the subscription's saved payment
+	 * token — PlanUpgrade's (Step 10) entry point for a prorated
+	 * upgrade/downgrade charge. Deliberately separate from charge_renewal():
+	 * a proration charge is NOT a renewal — it must not advance
+	 * next_payment_at/renewal_count the way complete_renewal() does, since
+	 * PlanUpgrade sets the resulting subscription state itself (proration
+	 * mode decides whether the cycle resets or stays put).
+	 *
+	 * @since 1.0.0
+	 * @param object $subscription Subscription row.
+	 * @param float  $amount       Amount to charge (must be > 0).
+	 * @param string $context      Stored as `_purecart_charge_context` order meta, for audit purposes.
+	 * @return \WC_Order|\WP_Error The paid order, or a WP_Error describing the failure.
+	 */
+	public function charge_one_off( object $subscription, float $amount, string $context = '' ) {
+		if ( $amount <= 0 ) {
+			return new \WP_Error( 'purecart_invalid_amount', __( 'Amount must be greater than zero.', 'purecart' ) );
+		}
+
+		$order = $this->create_renewal_order( $subscription, $amount );
+		if ( ! $order ) {
+			return new \WP_Error( 'purecart_order_failed', __( 'Could not create the charge order.', 'purecart' ) );
+		}
+
+		if ( '' !== $context ) {
+			$order->update_meta_data( '_purecart_charge_context', $context );
+			$order->save();
+		}
+
+		$attempt = $this->attempt_gateway_charge( $subscription, $order );
+
+		if ( ! $attempt['success'] ) {
+			return new \WP_Error( 'purecart_charge_failed', $attempt['reason'] );
+		}
+
+		$order->payment_complete();
+
+		$this->payments->record(
+			array(
+				'subscription_id' => $subscription->id,
+				'order_id'        => $order->get_id(),
+				'transaction_id'  => $order->get_transaction_id() ?: ( 'order_' . $order->get_id() ),
+				'amount'          => $amount,
+				'currency'        => $order->get_currency(),
+				'status'          => 'succeeded',
+			)
+		);
+
+		return $order;
+	}
+
+	/**
+	 * Attach the subscription's saved payment token to $order and attempt
+	 * the charge. Shared by charge_renewal() (regular due-cycle renewals) and
+	 * charge_one_off() (PlanUpgrade's prorated charges) — both need "find
+	 * token, find gateway, call process_payment()"; they differ only in what
+	 * happens next on success/failure, which stays in each caller.
+	 *
+	 * @since 1.0.0
+	 * @param object    $subscription Subscription row.
+	 * @param \WC_Order $order        Order to charge.
+	 * @return array{success: bool, reason: string}
+	 */
+	private function attempt_gateway_charge( object $subscription, \WC_Order $order ): array {
 		if ( empty( $subscription->payment_token_id ) || ! class_exists( '\WC_Payment_Tokens' ) ) {
-			$this->mark_failed( $subscription, $order, 'no_payment_token' );
-			return false;
+			return array(
+				'success' => false,
+				'reason'  => 'no_payment_token',
+			);
 		}
 
 		$token = \WC_Payment_Tokens::get( (int) $subscription->payment_token_id );
 		if ( ! $token ) {
-			$this->mark_failed( $subscription, $order, 'invalid_payment_token' );
-			return false;
+			return array(
+				'success' => false,
+				'reason'  => 'invalid_payment_token',
+			);
 		}
 
 		$gateways = WC()->payment_gateways()->payment_gateways();
 		$gateway  = $gateways[ $token->get_gateway_id() ] ?? null;
 
 		if ( ! $gateway ) {
-			$this->mark_failed( $subscription, $order, 'gateway_unavailable' );
-			return false;
+			return array(
+				'success' => false,
+				'reason'  => 'gateway_unavailable',
+			);
 		}
 
 		$order->add_payment_token( $token );
@@ -350,13 +526,17 @@ class RenewalEngine {
 			// supports WC_Payment_Tokens plugs into this unmodified.
 			$result = $gateway->process_payment( $order->get_id() );
 		} catch ( \Throwable $e ) {
-			$this->mark_failed( $subscription, $order, 'gateway_exception: ' . $e->getMessage() );
-			return false;
+			return array(
+				'success' => false,
+				'reason'  => 'gateway_exception: ' . $e->getMessage(),
+			);
 		}
 
 		if ( isset( $result['result'] ) && 'success' === $result['result'] ) {
-			$this->complete_renewal( $subscription, $order, 'charged' );
-			return true;
+			return array(
+				'success' => true,
+				'reason'  => '',
+			);
 		}
 
 		/**
@@ -368,13 +548,15 @@ class RenewalEngine {
 		 *
 		 * @since 1.0.0
 		 * @param string    $reason Default decline reason.
-		 * @param \WC_Order $order  The failed renewal order.
+		 * @param \WC_Order $order  The order that failed to charge.
 		 * @param mixed     $result The gateway's process_payment() return value.
 		 */
 		$reason = apply_filters( 'purecart_renewal_decline_reason', 'gateway_declined', $order, $result );
 
-		$this->mark_failed( $subscription, $order, $reason );
-		return false;
+		return array(
+			'success' => false,
+			'reason'  => $reason,
+		);
 	}
 
 	/**
@@ -518,6 +700,17 @@ class RenewalEngine {
 
 		DeliveryManager::renew( (array) $subscription );
 
+		// Gap found during Step 14: this method changes `status` (trialing/
+		// past_due -> active on a subscription's first successful charge after
+		// a trial or a dunning retry) but, unlike SubscriptionManager's own
+		// pause()/cancel()/expire(), never fired the generic status-changed
+		// hook — only DunningManager's suspend()/hard_cancel() did. RoleManager
+		// (Step 14) needs this to swap the trial role for the active role on
+		// trial conversion, so it's added here rather than worked around.
+		if ( 'active' !== $subscription->status ) {
+			do_action( 'purecart_subscription_status_changed', (int) $subscription->id, $subscription->status, 'active' );
+		}
+
 		do_action( 'purecart_subscription_renewed', (int) $subscription->id, $order ? $order->get_id() : null, $next_payment_at );
 	}
 
@@ -567,7 +760,84 @@ class RenewalEngine {
 			)
 		);
 
+		if ( 'past_due' !== $subscription->status ) {
+			do_action( 'purecart_subscription_status_changed', (int) $subscription->id, $subscription->status, 'past_due' );
+		}
+
 		do_action( 'purecart_subscription_payment_failed', (int) $subscription->id, $order->get_id(), $reason );
+	}
+
+	// -----------------------------------------------------------------------
+	// Early renewal (customer-initiated, before the due date)
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Renew a subscription immediately, before its next_payment_at is due —
+	 * feature doc § 5 ("Early renewal"), Step 12's REST endpoint for it.
+	 *
+	 * Deliberately simpler than RND-subscriptions.md's version, which routes
+	 * through a WooCommerce checkout redirect — this codebase already charges
+	 * renewals off-session via the customer's saved payment token (this exact
+	 * class), so an early renewal just charges that same way right now instead
+	 * of waiting for the scan to notice next_payment_at is due. No separate
+	 * checkout flow needed.
+	 *
+	 * Fires the same `purecart_subscription_renewed` action a scheduled
+	 * renewal does, so ChurnScorer/RetentionFlow/SplitPaymentManager all react
+	 * identically without needing to know this was "early".
+	 *
+	 * @since 1.0.0
+	 * @param int $subscription_id Subscription row ID.
+	 * @return true|\WP_Error
+	 */
+	public function early_renewal( int $subscription_id ) {
+		if ( ! apply_filters( 'purecart_allow_renewal', true, $subscription_id ) ) {
+			return new \WP_Error( 'purecart_renewals_blocked', __( 'Renewals are currently blocked on this site.', 'purecart' ) );
+		}
+
+		$subscription = $this->subscriptions->find( $subscription_id );
+		if ( ! $subscription || ! in_array( $subscription->status, array( 'active', 'trialing' ), true ) ) {
+			return new \WP_Error( 'purecart_not_active', __( 'Only active or trialing subscriptions can be renewed early.', 'purecart' ) );
+		}
+
+		$amount = $this->renewal_amount( $subscription );
+		$order  = null;
+
+		if ( $amount > 0.0 ) {
+			$order = $this->charge_one_off( $subscription, $amount, 'early_renewal' );
+			if ( is_wp_error( $order ) ) {
+				return $order;
+			}
+		}
+
+		$now             = current_time( 'mysql' );
+		$anchor          = $subscription->next_payment_at ?: $now;
+		$next_payment_at = BillingClock::add_interval( $anchor, (int) $subscription->billing_interval, $subscription->billing_period );
+
+		$this->subscriptions->update(
+			(int) $subscription->id,
+			array(
+				'last_payment_at' => $now,
+				'next_payment_at' => $next_payment_at,
+				'renewal_count'   => (int) $subscription->renewal_count + 1,
+			)
+		);
+
+		$this->logs->log(
+			(int) $subscription->id,
+			'early_renewal',
+			array(
+				'amount'   => $amount,
+				'order_id' => $order ? $order->get_id() : null,
+				'note'     => 'customer-initiated early renewal',
+			)
+		);
+
+		DeliveryManager::renew( (array) $subscription );
+
+		do_action( 'purecart_subscription_renewed', (int) $subscription->id, $order ? $order->get_id() : null, $next_payment_at );
+
+		return true;
 	}
 
 	// -----------------------------------------------------------------------
