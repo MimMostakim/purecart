@@ -22,18 +22,21 @@ import { IconButton } from './IconButton';
  *
  * @since 1.0.0
  *
- * @param {Object}   props       Component props.
- * @param {Page}     props.page  The currently active page identifier used to build breadcrumbs and title.
- * @param {Function} props.onNav Callback invoked with a target Page when a breadcrumb link is clicked.
+ * @param {Object}   props            Component props.
+ * @param {Page}     props.page       The currently active page identifier used to build breadcrumbs and title.
+ * @param {Function} props.onNav      Callback invoked with a target Page when a breadcrumb link is clicked.
+ * @param {string}   [props.detailLabel] Overrides the title/final breadcrumb when page is 'subscription-detail' - lets the header show "SUB-003 · SaaS Starter" instead of the generic static title.
  *
  * @return {JSX.Element} The header top bar element.
  */
 export function TopBar( {
 	page,
 	onNav,
+	detailLabel,
 }: {
 	page: Page;
 	onNav: ( p: Page ) => void;
+	detailLabel?: string;
 } ) {
 	const crumbs: Array< { label: string; page?: Page } > = [
 		{ label: 'PureCart -  Digital Downloads' },
@@ -42,6 +45,12 @@ export function TopBar( {
 		crumbs.push( { label: 'Subscriptions', page: 'subscriptions' } );
 		crumbs.push( { label: PAGE_TITLES[ page ] } );
 	}
+	if ( page === 'subscription-detail' ) {
+		crumbs.push( { label: 'Subscriptions', page: 'subscriptions' } );
+		crumbs.push( { label: detailLabel ?? PAGE_TITLES[ page ] } );
+	}
+
+	const title = page === 'subscription-detail' ? detailLabel ?? PAGE_TITLES[ page ] : PAGE_TITLES[ page ];
 
 	return (
 		<header
@@ -92,7 +101,7 @@ export function TopBar( {
 						fontFamily: 'Roboto, sans-serif',
 					} }
 				>
-					{ PAGE_TITLES[ page ] }
+					{ title }
 				</h1>
 			</div>
 			<div className="flex items-center gap-1">
