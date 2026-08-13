@@ -1,7 +1,7 @@
 import { createSlice } from '@reduxjs/toolkit';
 
 // ─── Subscriptions slice ────────────────────────────────────────────────────────
-// Intentionally left empty — state shape and reducers to be added later.
+// State shape and reducers to be expanded as the Subscriptions module grows.
 
 type SubscriptionsState = Record< string, never >;
 

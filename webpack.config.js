@@ -41,7 +41,8 @@ module.exports = {
 	devtool: false,
 
 	entry: {
-		'build/admin/admin':  path.resolve( rootDir, 'src/app/main.tsx' ),
+		'build/admin/app/app': path.resolve(rootDir, 'src/app/main.tsx'),
+		'build/admin/menu-router/menu-router': path.resolve(rootDir, 'src/menu-router/menu-router.js'),
 	},
 
 	output: {
