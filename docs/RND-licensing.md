@@ -242,31 +242,6 @@ Authorization: WordPress nonce (manage_woocommerce required)
 
 ---
 
-## PDF License Certificates (Phase 3)
-
-Inspired by Digital License Manager (DLM). When enabled, a "Download Certificate" button appears on the Licenses tab. The certificate is a PDF containing:
-
-- Plugin/product branding header
-- License key (large, clearly printed)
-- Licensee name and email
-- Activation limit and expiry
-- Date of purchase and order number
-
-**Implementation:** `spipu/html2pdf` Composer package renders an HTML template to PDF.
-
-```php
-// LicenseCertificate::generate( $license_id ): string  (returns PDF binary)
-$html2pdf = new \Spipu\Html2Pdf\Html2Pdf( 'P', 'A4', 'en' );
-$html2pdf->writeHTML( $this->get_template( $license ) );
-return $html2pdf->output( '', 'S' ); // 'S' = return as string
-```
-
-Template overridable in `your-theme/wdd/license-certificate.html`.
-
-> **Note:** The PDF generation key (`PURECART_PDF_ENCRYPTION_KEY`) must be backed up separately. If lost, existing certificates cannot be regenerated with the same visual hash/QR code for verification purposes.
-
----
-
 ## Migration Tool (Phase 3)
 
 `LicenseMigrator` provides a WP-CLI command and admin UI to import existing licenses:
