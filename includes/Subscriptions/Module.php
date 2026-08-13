@@ -14,6 +14,7 @@ declare( strict_types=1 );
 
 namespace PureCart\Subscriptions;
 
+use PureCart\API\Subscriptions as SubscriptionsApi;
 use PureCart\Settings\OptionKeys;
 use PureCart\Settings\Settings;
 use PureCart\Subscriptions\Delivery\CourseHandler;
@@ -59,7 +60,7 @@ class Module {
 		$plan_upgrade   = new PlanUpgrade( $renewal_engine );
 		$webhooks       = new WebhookHandler( $renewal_engine );
 
-		new RestController( $manager, $retention, $renewal_engine, $dunning, $plan_upgrade, $webhooks );
+		( new SubscriptionsApi( $manager, $retention, $renewal_engine, $dunning, $plan_upgrade, $webhooks ) )->register();
 	}
 
 	/**

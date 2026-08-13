@@ -15,6 +15,7 @@ use PureCart\Commerce\OrderHandler;
 use PureCart\Commerce\ProductTypes;
 use PureCart\API\RestApi;
 use PureCart\CustomerDashboard\Dashboard;
+use PureCart\Downloads\AccountDownloadsMerger;
 use PureCart\Admin\Admin;
 use PureCart\Subscriptions\Module as SubscriptionsModule;
 
@@ -58,6 +59,7 @@ final class Plugin {
 		new OrderHandler();
 		new RestApi();
 		new Dashboard();
+		new AccountDownloadsMerger();
 		new SubscriptionsModule();
 
 		if ( is_admin() ) {

@@ -2,27 +2,30 @@
 /**
  * REST API routes for the Subscriptions module.
  *
- * @package PureCart\Subscriptions
+ * @package PureCart\Api
  */
 
 declare( strict_types=1 );
 
-namespace PureCart\Subscriptions;
+namespace PureCart\Api;
+
+use PureCart\Subscriptions\SubscriptionRepository;
+use PureCart\Subscriptions\SubscriptionLogRepository;
+use PureCart\Subscriptions\SubscriptionManager;
+use PureCart\Subscriptions\SubscriptionReport;
+use PureCart\Subscriptions\RetentionFlow;
+use PureCart\Subscriptions\RenewalEngine;
+use PureCart\Subscriptions\DunningManager;
+use PureCart\Subscriptions\PlanUpgrade;
+use PureCart\Subscriptions\WebhookHandler;
+use PureCart\Subscriptions\ChurnScorer;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Registers its own `rest_api_init` hook rather than being called into by
- * `includes/API/RestApi.php` (as subscription-final-dev-plan.md § 0/§ 6
- * describes) — checked against the real file: `RestApi::register_routes()`
- * inlines every License/SaaS route directly on itself, there's no existing
- * "controller class the registrar calls into" pattern to follow, and
- * `RestApi` has no access to this module's shared business-logic instances
- * (SubscriptionManager, RenewalEngine, ...) anyway — they live inside
- * `Subscriptions\Module`, a sibling, not a parent. WordPress doesn't care
- * which class calls `register_rest_route()`; routes register under the same
- * `purecart/v1` namespace either way. Keeps this module fully self-contained,
- * matching every other step so far.
+ * Registers its own routes on `rest_api_init` via PureCartApi::register(),
+ * called explicitly from Subscriptions\Module rather than auto-wired in the
+ * constructor — same explicit-call pattern as PureCartStore::create().
  *
  * Scope: implements REST endpoints for functionality that actually exists
  * (Steps 1-11). Deliberately NOT registered, because the underlying feature
@@ -38,7 +41,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * @since 1.0.0
  */
-class RestController {
+class Subscriptions extends PureCartApi {
 
 	/** @var SubscriptionRepository */
 	private SubscriptionRepository $subscriptions;
@@ -76,6 +79,9 @@ class RestController {
 	 * RenewalEngine, DunningManager) register their own hooks in their
 	 * constructors; a second `new` per request would double-register those.
 	 *
+	 * Route registration is NOT done here — caller calls ->register() which
+	 * wires `rest_api_init` via the PureCartApi base class.
+	 *
 	 * @since 1.0.0
 	 */
 	public function __construct(
@@ -97,8 +103,6 @@ class RestController {
 
 		// Not injected: SubscriptionReport is read-only and registers no hooks.
 		$this->report = new SubscriptionReport();
-
-		add_action( 'rest_api_init', array( $this, 'register_routes' ) );
 	}
 
 	// -----------------------------------------------------------------------
