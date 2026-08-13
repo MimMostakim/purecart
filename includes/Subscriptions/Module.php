@@ -14,6 +14,8 @@ declare( strict_types=1 );
 
 namespace PureCart\Subscriptions;
 
+use PureCart\Settings\OptionKeys;
+use PureCart\Settings\Settings;
 use PureCart\Subscriptions\Delivery\CourseHandler;
 use PureCart\Subscriptions\Delivery\DownloadHandler;
 use PureCart\Subscriptions\Delivery\MembershipHandler;
@@ -29,18 +31,6 @@ defined( 'ABSPATH' ) || exit;
 class Module {
 
 	/**
-	 * Option key toggling the whole module on/off.
-	 *
-	 * @var string
-	 */
-	public const OPTION_ENABLED = 'purecart_sub_enabled';
-
-	/**
-	 * Register the module's classes/hooks, unless disabled in settings.
-	 *
-	 * Steps 4+ (SubscriptionManager, RenewalEngine, ...) will be instantiated
-	 * here as they're built.
-	 *
 	 * @since 1.0.0
 	 */
 	public function __construct() {
@@ -59,17 +49,11 @@ class Module {
 		new RoleManager();
 		new RenewalSync();
 		new SubscriptionCoupon();
-		// Listens for purecart_subscription_renewed to fill the recognized-
-		// revenue ledger (Step 15). SubscriptionReport itself is constructed
-		// where it's used (RestController) — it registers no hooks.
 		new RevenueRepository();
 		new SubscriptionExport();
 
-		// Every instance below is constructed exactly once and shared with
-		// whatever else needs it (RestController, WebhookHandler) — several of
-		// these classes (SubscriptionManager above, RenewalEngine, DunningManager)
-		// register their own hooks in their constructors; a second `new` per
-		// consumer would double-register those and double-run every renewal.
+		// Shared instances — constructed once here and passed to the classes
+		// that need them, so hooks are registered exactly once per request.
 		$renewal_engine = new RenewalEngine();
 		$dunning        = new DunningManager( $renewal_engine );
 		$plan_upgrade   = new PlanUpgrade( $renewal_engine );
@@ -105,6 +89,6 @@ class Module {
 	 * @return bool
 	 */
 	public static function is_enabled(): bool {
-		return (bool) get_option( self::OPTION_ENABLED, true );
+		return (bool) Settings::get( OptionKeys::SUB_ENABLED, true );
 	}
 }

@@ -3,22 +3,19 @@ import { M3, NAV_SCHEMA } from '../../utils/static-data';
 import type { Page } from '../../utils/static-data';
 
 /**
- * Renders the collapsible admin navigation sidebar.
+ * Collapsible admin navigation sidebar.
  *
- * Iterates over NAV_SCHEMA to build nav items, applying active and enabled
- * states. Items whose moduleKey is not present in enabledModules are rendered
- * at reduced opacity with a lock icon and are non-interactive.
+ * Iterates over NAV_SCHEMA to build all nav items. Items with `dividerAfter`
+ * render a horizontal rule below them (used to separate the main nav group
+ * from Settings). Active item gets M3 secondaryContainer highlight; hover
+ * state uses surfaceContainerHigh.
  *
  * @since 1.0.0
  *
- * @param {Object}      props                Component props.
- * @param {Page}        props.activePage     The currently active page identifier.
- * @param {Function}    props.onNav          Callback invoked with the target Page when a nav item is clicked.
- * @param {boolean}     props.collapsed      Controls whether the sidebar renders in narrow collapsed mode.
- * @param {Function}    props.onToggle       Callback invoked when the collapse/expand chevron button is clicked.
- * @param {Set<string>} props.enabledModules Set of module name strings that are currently enabled.
- *
- * @return {JSX.Element} The aside navigation sidebar element.
+ * @param props.activePage  The currently active page identifier.
+ * @param props.onNav       Called with the target Page when a nav item is clicked.
+ * @param props.collapsed   Controls collapsed (icon-only) mode.
+ * @param props.onToggle    Called when the collapse/expand chevron is clicked.
  */
 export function Sidebar( {
 	activePage,
@@ -42,7 +39,7 @@ export function Sidebar( {
 				overflow: 'hidden',
 			} }
 		>
-			{ /* Logo */ }
+			{ /* ── Logo ── */ }
 			<div
 				className="flex items-center gap-3 px-4 py-5 flex-shrink-0"
 				style={ { minHeight: 72 } }
@@ -53,28 +50,24 @@ export function Sidebar( {
 				>
 					<Package size={ 20 } color={ M3.onPrimary } />
 				</div>
+
 				{ ! collapsed && (
 					<div>
 						<div
 							className="font-semibold text-sm leading-tight"
-							style={ {
-								color: M3.onSurface,
-								fontFamily: 'Roboto, sans-serif',
-							} }
+							style={ { color: M3.onSurface, fontFamily: 'Roboto, sans-serif' } }
 						>
 							PureCart
 						</div>
 						<div
 							className="text-xs"
-							style={ {
-								color: M3.onSurfaceVariant,
-								fontFamily: 'Roboto, sans-serif',
-							} }
+							style={ { color: M3.onSurfaceVariant, fontFamily: 'Roboto, sans-serif' } }
 						>
 							Digital Downloads
 						</div>
 					</div>
 				) }
+
 				<button
 					onClick={ onToggle }
 					className="ml-auto flex items-center justify-center w-8 h-8 rounded-full transition-all flex-shrink-0"
@@ -84,59 +77,53 @@ export function Sidebar( {
 						background: 'transparent',
 						cursor: 'pointer',
 					} }
+					aria-label={ collapsed ? 'Expand sidebar' : 'Collapse sidebar' }
 				>
-					{ collapsed ? (
-						<ChevronRight size={ 16 } />
-					) : (
-						<ChevronLeft size={ 16 } />
-					) }
+					{ collapsed ? <ChevronRight size={ 16 } /> : <ChevronLeft size={ 16 } /> }
 				</button>
 			</div>
 
-			{ /* Nav */ }
+			{ /* ── Nav ── */ }
 			<nav className="flex-1 px-3 overflow-y-auto pb-4">
 				{ NAV_SCHEMA.map( ( item ) => {
-					const active = activePage === item.id;
+					const active = activePage === item.id || (
+						// Treat subscription-analytics as subscriptions being active
+						item.id === 'subscriptions' && activePage === 'subscription-analytics'
+					);
 					const Icon = item.icon;
+
 					return (
 						<div key={ item.id }>
 							<button
 								onClick={ () => onNav( item.id ) }
+								title={ collapsed ? item.label : undefined }
 								className="relative flex items-center w-full transition-all mb-0.5"
 								style={ {
-									height: 56,
+									height: 52,
 									borderRadius: 9999,
-									backgroundColor: active
-										? M3.secondaryContainer
-										: 'transparent',
-									color: active
-										? M3.onSecondaryContainer
-										: M3.onSurfaceVariant,
+									backgroundColor: active ? M3.secondaryContainer : 'transparent',
+									color: active ? M3.onSecondaryContainer : M3.onSurfaceVariant,
 									border: 'none',
 									cursor: 'pointer',
 									paddingLeft: collapsed ? 0 : 16,
 									paddingRight: collapsed ? 0 : 16,
-									justifyContent: collapsed
-										? 'center'
-										: 'flex-start',
+									justifyContent: collapsed ? 'center' : 'flex-start',
 									gap: collapsed ? 0 : 12,
 								} }
 								onMouseEnter={ ( e ) => {
-									if ( ! active )
-										(
-											e.currentTarget as HTMLElement
-										 ).style.backgroundColor =
+									if ( ! active ) {
+										( e.currentTarget as HTMLElement ).style.backgroundColor =
 											M3.surfaceContainerHigh;
+									}
 								} }
 								onMouseLeave={ ( e ) => {
-									if ( ! active )
-										(
-											e.currentTarget as HTMLElement
-										 ).style.backgroundColor =
+									if ( ! active ) {
+										( e.currentTarget as HTMLElement ).style.backgroundColor =
 											'transparent';
+									}
 								} }
 							>
-								<Icon size={ 22 } />
+								<Icon size={ 20 } />
 								{ ! collapsed && (
 									<span
 										className="text-sm font-medium"
@@ -149,6 +136,17 @@ export function Sidebar( {
 									</span>
 								) }
 							</button>
+
+							{ /* Divider after item if flagged */ }
+							{ item.dividerAfter && (
+								<hr
+									style={ {
+										border: 'none',
+										borderTop: `1px solid ${ M3.outlineVariant }`,
+										margin: '8px 4px',
+									} }
+								/>
+							) }
 						</div>
 					);
 				} ) }

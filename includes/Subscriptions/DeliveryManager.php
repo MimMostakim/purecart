@@ -11,6 +11,8 @@ namespace PureCart\Subscriptions;
 
 use PureCart\Licensing\LicenseGenerator;
 use PureCart\SaaS\AccountProvisioner;
+use PureCart\Settings\OptionKeys;
+use PureCart\Settings\Settings;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -252,6 +254,6 @@ class DeliveryManager {
 			return true;
 		}
 
-		return (bool) get_option( 'purecart_sub_cancel_saas_immediately', false );
+		return (bool) Settings::get( OptionKeys::SUB_CANCEL_SAAS_IMMEDIATELY, false );
 	}
 }

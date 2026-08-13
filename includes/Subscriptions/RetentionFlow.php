@@ -10,6 +10,9 @@ declare( strict_types=1 );
 
 namespace PureCart\Subscriptions;
 
+use PureCart\Settings\OptionKeys;
+use PureCart\Settings\Settings;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -102,14 +105,14 @@ class RetentionFlow {
 				'discount'  => array(
 					'type'            => 'discount',
 					'label'           => __( 'Get a discount', 'purecart' ),
-					'percent'         => (float) get_option( 'purecart_sub_retention_discount_percent', 20 ),
-					'cycles'          => (int) get_option( 'purecart_sub_retention_discount_cycles', 3 ),
+					'percent'         => (float) Settings::get( OptionKeys::SUB_RETENTION_DISCOUNT_PERCENT, 20 ),
+					'cycles'          => (int) Settings::get( OptionKeys::SUB_RETENTION_DISCOUNT_CYCLES, 3 ),
 					'trigger_reasons' => array( 'too_expensive' ),
 				),
 				'pause'     => array(
 					'type'            => 'pause',
 					'label'           => __( 'Pause your subscription instead', 'purecart' ),
-					'pause_days'      => (int) get_option( 'purecart_sub_retention_pause_days', 30 ),
+					'pause_days'      => (int) Settings::get( OptionKeys::SUB_RETENTION_PAUSE_DAYS, 30 ),
 					'trigger_reasons' => array( 'not_using', 'pausing' ),
 				),
 				'skip'      => array(
@@ -125,7 +128,7 @@ class RetentionFlow {
 				'contact'   => array(
 					'type'            => 'contact',
 					'label'           => __( 'Talk to us first', 'purecart' ),
-					'url'             => (string) get_option( 'purecart_sub_retention_contact_url', '' ),
+					'url'             => (string) Settings::get( OptionKeys::SUB_RETENTION_CONTACT_URL, '' ),
 					'trigger_reasons' => array(), // fallback — eligible for any reason.
 				),
 			)

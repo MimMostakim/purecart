@@ -1,4 +1,16 @@
-import { Repeat } from 'lucide-react';
+import {
+	LayoutDashboard,
+	Key,
+	Download,
+	RefreshCcw,
+	Repeat,
+	Cloud,
+	Users,
+	ShoppingCart,
+	Shield,
+	BarChart2,
+	Settings as SettingsIcon,
+} from 'lucide-react';
 
 // ─── M3 Color Tokens ──────────────────────────────────────────────────────────
 export const M3 = {
@@ -19,6 +31,7 @@ export const M3 = {
 	outline: '#79747E',
 	outlineVariant: '#CAC4D0',
 	error: '#B3261E',
+	errorContainer: '#F9DEDC',
 	success: '#386A20',
 	successContainer: '#C2E7A0',
 	warning: '#7A5900',
@@ -27,28 +40,65 @@ export const M3 = {
 	infoContainer: '#C8E6FF',
 };
 
-// ─── Types ─────────────────────────────────────────────────────────────────────
-export type Page = 'subscriptions' | 'subscription-analytics';
+// ─── Page identifiers ──────────────────────────────────────────────────────────
+export type Page =
+	| 'overview'
+	| 'licenses'
+	| 'downloads'
+	| 'updates'
+	| 'subscriptions'
+	| 'subscription-analytics'
+	| 'saas-accounts'
+	| 'affiliates'
+	| 'abandoned-cart'
+	| 'security'
+	| 'analytics'
+	| 'settings';
 
 // ─── Nav items definition ──────────────────────────────────────────────────────
 export const NAV_SCHEMA: Array< {
 	id: Page;
 	icon: React.ElementType;
 	label: string;
+	/** Render a horizontal rule after this item. */
+	dividerAfter?: boolean;
 } > = [
-	{
-		id: 'subscriptions',
-		icon: Repeat,
-		label: 'Subscriptions',
-	},
+	{ id: 'overview',       icon: LayoutDashboard, label: 'Overview' },
+	{ id: 'licenses',       icon: Key,             label: 'Licenses' },
+	{ id: 'downloads',      icon: Download,        label: 'Downloads' },
+	{ id: 'updates',        icon: RefreshCcw,      label: 'Updates' },
+	{ id: 'subscriptions',  icon: Repeat,          label: 'Subscriptions' },
+	{ id: 'saas-accounts',  icon: Cloud,           label: 'SaaS Accounts' },
+	{ id: 'affiliates',     icon: Users,           label: 'Affiliates' },
+	{ id: 'abandoned-cart', icon: ShoppingCart,    label: 'Abandoned Cart' },
+	{ id: 'security',       icon: Shield,          label: 'Security' },
+	{ id: 'analytics',      icon: BarChart2,       label: 'Analytics', dividerAfter: true },
+	{ id: 'settings',       icon: SettingsIcon,    label: 'Settings' },
 ];
 
+// ─── Page titles ───────────────────────────────────────────────────────────────
 export const PAGE_TITLES: Record< Page, string > = {
-	subscriptions: 'Subscriptions',
+	'overview':               'Overview',
+	'licenses':               'Licenses',
+	'downloads':              'Downloads',
+	'updates':                'Updates',
+	'subscriptions':          'Subscriptions',
 	'subscription-analytics': 'Subscription Analytics',
+	'saas-accounts':          'SaaS Accounts',
+	'affiliates':             'Affiliates',
+	'abandoned-cart':         'Abandoned Cart',
+	'security':               'Security',
+	'analytics':              'Analytics',
+	'settings':               'Settings',
 };
 
-// ─── Sample Data ───────────────────────────────────────────────────────────────
+// ─── Parent page map (for breadcrumbs) ────────────────────────────────────────
+/** Pages that are children of another page in the breadcrumb trail. */
+export const PAGE_PARENT: Partial< Record< Page, Page > > = {
+	'subscription-analytics': 'subscriptions',
+};
+
+// ─── Sample / static data ─────────────────────────────────────────────────────
 export const subscriptionsData = [
 	{
 		id: 'SUB-001',
@@ -124,15 +174,17 @@ export const subTrendData = [
 	{ month: 'May', active: 5100, new: 610, churned: 230, paused: 290 },
 	{ month: 'Jun', active: 5241, new: 580, churned: 215, paused: 412 },
 ];
+
 export const subPlanMix = [
-	{ name: 'Annual', value: 58, color: M3.primary },
-	{ name: 'Monthly', value: 31, color: M3.secondary },
+	{ name: 'Annual',   value: 58, color: M3.primary },
+	{ name: 'Monthly',  value: 31, color: M3.secondary },
 	{ name: 'Lifetime', value: 11, color: M3.info },
 ];
+
 export const subRevenueByProduct = [
-	{ product: 'Plugin Pro', revenue: 24800 },
+	{ product: 'Plugin Pro',   revenue: 24800 },
 	{ product: 'Theme Bundle', revenue: 11200 },
-	{ product: 'SaaS Pro', revenue: 6400 },
+	{ product: 'SaaS Pro',     revenue: 6400 },
 	{ product: 'SaaS Starter', revenue: 2200 },
 ];
 
@@ -170,74 +222,24 @@ export const paymentHistory: Record<
 	Array< { date: string; amount: string; method: string; status: string } >
 > = {
 	'SUB-001': [
-		{
-			date: '2025-01-01',
-			amount: '$99.00',
-			method: 'Visa ···4242',
-			status: 'paid',
-		},
-		{
-			date: '2024-01-01',
-			amount: '$99.00',
-			method: 'Visa ···4242',
-			status: 'paid',
-		},
-		{
-			date: '2023-01-01',
-			amount: '$99.00',
-			method: 'Visa ···4242',
-			status: 'paid',
-		},
+		{ date: '2025-01-01', amount: '$99.00', method: 'Visa ···4242',        status: 'paid' },
+		{ date: '2024-01-01', amount: '$99.00', method: 'Visa ···4242',        status: 'paid' },
+		{ date: '2023-01-01', amount: '$99.00', method: 'Visa ···4242',        status: 'paid' },
 	],
 	'SUB-002': [
-		{
-			date: '2025-01-02',
-			amount: '$29.00',
-			method: 'Mastercard ···1234',
-			status: 'paid',
-		},
-		{
-			date: '2024-12-02',
-			amount: '$29.00',
-			method: 'Mastercard ···1234',
-			status: 'paid',
-		},
-		{
-			date: '2024-11-02',
-			amount: '$29.00',
-			method: 'Mastercard ···1234',
-			status: 'failed',
-		},
-		{
-			date: '2024-10-02',
-			amount: '$29.00',
-			method: 'Mastercard ···1234',
-			status: 'paid',
-		},
+		{ date: '2025-01-02', amount: '$29.00', method: 'Mastercard ···1234',  status: 'paid' },
+		{ date: '2024-12-02', amount: '$29.00', method: 'Mastercard ···1234',  status: 'paid' },
+		{ date: '2024-11-02', amount: '$29.00', method: 'Mastercard ···1234',  status: 'failed' },
+		{ date: '2024-10-02', amount: '$29.00', method: 'Mastercard ···1234',  status: 'paid' },
 	],
 	'SUB-003': [
-		{
-			date: '2025-01-08',
-			amount: '$49.00',
-			method: 'PayPal',
-			status: 'failed',
-		},
-		{
-			date: '2024-12-08',
-			amount: '$49.00',
-			method: 'PayPal',
-			status: 'paid',
-		},
+		{ date: '2025-01-08', amount: '$49.00', method: 'PayPal',              status: 'failed' },
+		{ date: '2024-12-08', amount: '$49.00', method: 'PayPal',              status: 'paid' },
 	],
 	'SUB-004': [
-		{
-			date: '2025-01-01',
-			amount: '$99.00',
-			method: 'Visa ···9999',
-			status: 'paid',
-		},
+		{ date: '2025-01-01', amount: '$99.00', method: 'Visa ···9999',        status: 'paid' },
 	],
 	'SUB-007': [
-		{ date: '2025-01-10', amount: '$0.00', method: '—', status: 'trial' },
+		{ date: '2025-01-10', amount: '$0.00',  method: '—',                   status: 'trial' },
 	],
 };

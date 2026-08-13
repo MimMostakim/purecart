@@ -10,6 +10,9 @@ declare( strict_types=1 );
 
 namespace PureCart\Subscriptions;
 
+use PureCart\Settings\OptionKeys;
+use PureCart\Settings\Settings;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -148,8 +151,8 @@ class DunningManager {
 	 * @return void
 	 */
 	private function schedule_next_retry( int $subscription_id, int $attempt_index ): void {
-		$intervals    = (array) get_option( 'purecart_sub_retry_intervals', array( 1, 3, 5 ) );
-		$max_attempts = (int) get_option( 'purecart_sub_retry_attempts', 3 );
+		$intervals    = (array) Settings::get( OptionKeys::SUB_RETRY_INTERVALS, array( 1, 3, 5 ) );
+		$max_attempts = (int) Settings::get( OptionKeys::SUB_RETRY_ATTEMPTS, 3 );
 
 		if ( $attempt_index >= $max_attempts || ! isset( $intervals[ $attempt_index ] ) ) {
 			return;
@@ -220,7 +223,7 @@ class DunningManager {
 	 * @return void
 	 */
 	private function check_active_grace(): void {
-		$grace_days = (int) get_option( 'purecart_sub_active_grace_days', 7 );
+		$grace_days = (int) Settings::get( OptionKeys::SUB_ACTIVE_GRACE_DAYS, 7 );
 
 		foreach ( $this->subscriptions->find_by_status( 'past_due' ) as $subscription ) {
 			if ( ! $subscription->next_payment_at ) {
@@ -243,7 +246,7 @@ class DunningManager {
 	 * @return void
 	 */
 	private function check_suspended_grace(): void {
-		$grace_days = (int) get_option( 'purecart_sub_suspended_grace_days', 7 );
+		$grace_days = (int) Settings::get( OptionKeys::SUB_SUSPENDED_GRACE_DAYS, 7 );
 
 		foreach ( $this->subscriptions->find_by_status( 'suspended' ) as $subscription ) {
 			if ( ! $subscription->suspended_at ) {

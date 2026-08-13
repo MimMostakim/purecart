@@ -11,6 +11,9 @@ declare( strict_types=1 );
 
 namespace PureCart\Subscriptions;
 
+use PureCart\Settings\OptionKeys;
+use PureCart\Settings\Settings;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -52,7 +55,7 @@ class RenewalSync {
 	 * @return bool
 	 */
 	public static function is_enabled(): bool {
-		return (bool) get_option( 'purecart_sub_renewal_sync', false );
+		return (bool) Settings::get( OptionKeys::SUB_RENEWAL_SYNC, false );
 	}
 
 	/**
@@ -97,7 +100,7 @@ class RenewalSync {
 	 * @return string MySQL datetime string.
 	 */
 	public static function next_sync_date( string $from_datetime ): string {
-		$sync_day = max( 1, min( 28, (int) get_option( 'purecart_sub_renewal_sync_date', 1 ) ) );
+		$sync_day = max( 1, min( 28, (int) Settings::get( OptionKeys::SUB_RENEWAL_SYNC_DATE, 1 ) ) );
 		$from     = BillingClock::to_dt( $from_datetime );
 
 		$candidate = $from->setDate( (int) $from->format( 'Y' ), (int) $from->format( 'n' ), $sync_day )->setTime( 0, 0, 0 );

@@ -9,6 +9,9 @@ declare( strict_types=1 );
 
 namespace PureCart\Subscriptions;
 
+use PureCart\Settings\OptionKeys;
+use PureCart\Settings\Settings;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -87,7 +90,7 @@ class PlanUpgrade {
 			return new \WP_Error( 'purecart_invalid_product', __( 'The target product is not a valid subscription product.', 'purecart' ) );
 		}
 
-		$mode = $mode ?? (string) get_option( 'purecart_sub_proration_mode', self::MODE_APPLY_AT_RENEWAL );
+		$mode = $mode ?? (string) Settings::get( OptionKeys::SUB_PRORATION_MODE, self::MODE_APPLY_AT_RENEWAL );
 		if ( ! in_array( $mode, self::VALID_MODES, true ) ) {
 			$mode = self::MODE_APPLY_AT_RENEWAL;
 		}

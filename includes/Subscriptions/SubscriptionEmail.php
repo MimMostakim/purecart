@@ -28,6 +28,8 @@ use PureCart\Subscriptions\Emails\PlanChangedEmail;
 use PureCart\Subscriptions\Emails\SkipRenewalConfirmedEmail;
 use PureCart\Subscriptions\Emails\CardExpiringSoonEmail;
 use PureCart\Subscriptions\Emails\PaymentReauthorizationEmail;
+use PureCart\Settings\OptionKeys;
+use PureCart\Settings\Settings;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -128,7 +130,7 @@ class SubscriptionEmail {
 	 * @return void
 	 */
 	private function send_renewal_reminders(): void {
-		$reminder_days = (array) get_option( 'purecart_sub_renewal_reminder_days', array( 7, 3, 1 ) );
+		$reminder_days = (array) Settings::get( OptionKeys::SUB_RENEWAL_REMINDER_DAYS, array( 7, 3, 1 ) );
 		$candidates    = array_merge( $this->subscriptions->find_by_status( 'active' ), $this->subscriptions->find_by_status( 'trialing' ) );
 
 		foreach ( $candidates as $subscription ) {
@@ -155,7 +157,7 @@ class SubscriptionEmail {
 	 * @return void
 	 */
 	private function send_trial_ending_reminders(): void {
-		$reminder_days = (int) get_option( 'purecart_sub_trial_reminder_days', 3 );
+		$reminder_days = (int) Settings::get( OptionKeys::SUB_TRIAL_REMINDER_DAYS, 3 );
 
 		foreach ( $this->subscriptions->find_by_status( 'trialing' ) as $subscription ) {
 			if ( ! $subscription->trial_ends_at ) {
@@ -183,7 +185,7 @@ class SubscriptionEmail {
 			return;
 		}
 
-		$warning_days = (int) get_option( 'purecart_sub_card_expiry_warning_days', 30 );
+		$warning_days = (int) Settings::get( OptionKeys::SUB_CARD_EXPIRY_WARNING_DAYS, 30 );
 		$candidates   = array_merge( $this->subscriptions->find_by_status( 'active' ), $this->subscriptions->find_by_status( 'trialing' ) );
 
 		foreach ( $candidates as $subscription ) {
@@ -221,7 +223,7 @@ class SubscriptionEmail {
 	 * @return void
 	 */
 	public function send_grace_reminders(): void {
-		$grace_days    = (int) get_option( 'purecart_sub_suspended_grace_days', 7 );
+		$grace_days    = (int) Settings::get( OptionKeys::SUB_SUSPENDED_GRACE_DAYS, 7 );
 		$warn_days_out = 2;
 
 		foreach ( $this->subscriptions->find_by_status( 'suspended' ) as $subscription ) {

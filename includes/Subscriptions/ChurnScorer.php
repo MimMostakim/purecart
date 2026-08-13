@@ -10,6 +10,9 @@ declare( strict_types=1 );
 
 namespace PureCart\Subscriptions;
 
+use PureCart\Settings\OptionKeys;
+use PureCart\Settings\Settings;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -254,7 +257,7 @@ class ChurnScorer {
 			(string) $subscription->billing_period
 		);
 
-		$avg_lifetime_months = (int) get_option( 'purecart_sub_avg_lifetime_months', 24 );
+		$avg_lifetime_months = (int) Settings::get( OptionKeys::SUB_AVG_LIFETIME_MONTHS, 24 );
 		$ltv                 = $monthly_equivalent * $avg_lifetime_months;
 
 		$this->subscriptions->update( (int) $subscription->id, array( 'customer_ltv' => round( $ltv, 2 ) ) );

@@ -56,13 +56,6 @@ class RenewalEngine {
 
 		add_action( self::SCAN_HOOK, array( $this, 'scan_due_renewals' ) );
 		add_action( self::PROCESS_HOOK, array( $this, 'process_renewal' ) );
-
-		// Deferred to `init` rather than called directly here — this constructor
-		// runs on every request via Plugin::init() at plugins_loaded:11, which is
-		// before Action Scheduler's own data store is ready. Calling as_*()
-		// that early doesn't fail outright, but logs a _doing_it_wrong() notice
-		// every request (confirmed in debug.log) and isn't a supported timing
-		// per Action Scheduler's own docs.
 		add_action( 'init', array( $this, 'maybe_schedule_recurring_scan' ) );
 	}
 
@@ -441,7 +434,7 @@ class RenewalEngine {
 	 * @param string $context      Stored as `_purecart_charge_context` order meta, for audit purposes.
 	 * @return \WC_Order|\WP_Error The paid order, or a WP_Error describing the failure.
 	 */
-	public function charge_one_off( object $subscription, float $amount, string $context = '' ) {
+	public function charge_one_off( object $subscription, float $amount, string $context = '' ): \WC_Order|\WP_Error {
 		if ( $amount <= 0 ) {
 			return new \WP_Error( 'purecart_invalid_amount', __( 'Amount must be greater than zero.', 'purecart' ) );
 		}
@@ -790,7 +783,7 @@ class RenewalEngine {
 	 * @param int $subscription_id Subscription row ID.
 	 * @return true|\WP_Error
 	 */
-	public function early_renewal( int $subscription_id ) {
+	public function early_renewal( int $subscription_id ): true|\WP_Error {
 		if ( ! apply_filters( 'purecart_allow_renewal', true, $subscription_id ) ) {
 			return new \WP_Error( 'purecart_renewals_blocked', __( 'Renewals are currently blocked on this site.', 'purecart' ) );
 		}

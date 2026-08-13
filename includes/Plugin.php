@@ -47,6 +47,13 @@ final class Plugin {
 
 	/** Boot all modules. */
 	private function init(): void {
+		// Run a lightweight schema upgrade check on every request.
+		// The version comparison is a cached get_option() — essentially free.
+		// dbDelta() only fires on version mismatch (post-update, first boot).
+		// Belongs here rather than Admin so REST, CLI, and front-end requests
+		// also receive the upgraded schema, not only WP admin page loads.
+		Activator::maybe_upgrade();
+
 		new ProductTypes();
 		new OrderHandler();
 		new RestApi();

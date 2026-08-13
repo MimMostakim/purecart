@@ -95,9 +95,7 @@ class RestController {
 		$this->plan_upgrade   = $plan_upgrade;
 		$this->webhooks       = $webhooks;
 
-		// Not injected: SubscriptionReport is read-only and registers no hooks
-		// of its own, so a second instance is harmless — unlike the six above,
-		// which all register hooks in their constructors.
+		// Not injected: SubscriptionReport is read-only and registers no hooks.
 		$this->report = new SubscriptionReport();
 
 		add_action( 'rest_api_init', array( $this, 'register_routes' ) );
@@ -122,6 +120,14 @@ class RestController {
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'list_subscriptions' ),
 				'permission_callback' => array( $this, 'permission_admin' ),
+				'args'                => array(
+					'status' => array(
+						'type'              => 'string',
+						'enum'              => array( 'active', 'trialing', 'paused', 'past_due', 'suspended', 'pending_cancel', 'cancelled', 'expired', 'completed' ),
+						'sanitize_callback' => 'sanitize_key',
+						'required'          => false,
+					),
+				),
 			)
 		);
 
@@ -145,8 +151,26 @@ class RestController {
 			)
 		);
 
-		$owner_or_admin_actions = array( 'pause', 'resume', 'cancel', 'skip', 'early-renewal', 'resubscribe', 'upgrade' );
-		foreach ( $owner_or_admin_actions as $action ) {
+		register_rest_route(
+			$ns,
+			$base . '/(?P<id>\d+)/pause',
+			array(
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'handle_action_pause' ),
+				'permission_callback' => array( $this, 'permission_owner_or_admin' ),
+				'args'                => array(
+					'resume_at' => array(
+						'type'              => 'string',
+						'format'            => 'date-time',
+						'sanitize_callback' => 'sanitize_text_field',
+						'required'          => false,
+						'description'       => 'Optional MySQL datetime (Y-m-d H:i:s) at which to auto-resume the subscription.',
+					),
+				),
+			)
+		);
+
+		foreach ( array( 'resume', 'cancel', 'skip', 'early-renewal', 'resubscribe', 'upgrade' ) as $action ) {
 			register_rest_route(
 				$ns,
 				$base . '/(?P<id>\d+)/' . $action,
@@ -194,7 +218,7 @@ class RestController {
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'get_cancellation_reasons' ),
-				'permission_callback' => '__return_true',
+				'permission_callback' => static fn() => true,
 			)
 		);
 
@@ -224,7 +248,7 @@ class RestController {
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'handle_external_renewal' ),
-				'permission_callback' => '__return_true', // verified via HMAC signature inside the callback, not a WP capability.
+				'permission_callback' => static fn() => true, // verified via HMAC signature inside the callback, not a WP capability.
 			)
 		);
 
@@ -234,7 +258,7 @@ class RestController {
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'handle_webhook_event' ),
-				'permission_callback' => '__return_true', // same — HMAC-verified inside.
+				'permission_callback' => static fn() => true, // same — HMAC-verified inside.
 			)
 		);
 
@@ -424,7 +448,7 @@ class RestController {
 	 * @param \WP_REST_Request $request REST request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function get_subscription( \WP_REST_Request $request ) {
+	public function get_subscription( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$subscription = $this->subscriptions->find( (int) $request->get_param( 'id' ) );
 		if ( ! $subscription ) {
 			return $this->not_found();
@@ -440,7 +464,7 @@ class RestController {
 	 * @param \WP_REST_Request $request REST request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function get_logs( \WP_REST_Request $request ) {
+	public function get_logs( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$id = (int) $request->get_param( 'id' );
 		if ( ! $this->subscriptions->find( $id ) ) {
 			return $this->not_found();
@@ -512,7 +536,7 @@ class RestController {
 	 * @param \WP_REST_Request $request REST request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function handle_action_pause( \WP_REST_Request $request ) {
+	public function handle_action_pause( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$id        = (int) $request->get_param( 'id' );
 		$resume_at = $request->get_param( 'resume_at' );
 
@@ -526,7 +550,7 @@ class RestController {
 	 * @param \WP_REST_Request $request REST request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function handle_action_resume( \WP_REST_Request $request ) {
+	public function handle_action_resume( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$id = (int) $request->get_param( 'id' );
 
 		return $this->action_result( $this->manager->resume( $id ), $id, __( 'Could not resume this subscription.', 'purecart' ) );
@@ -537,7 +561,7 @@ class RestController {
 	 * @param \WP_REST_Request $request REST request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function handle_action_cancel( \WP_REST_Request $request ) {
+	public function handle_action_cancel( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$id          = (int) $request->get_param( 'id' );
 		$immediately = null === $request->get_param( 'immediately' ) ? true : (bool) $request->get_param( 'immediately' );
 		$reason      = $request->get_param( 'reason' ) ? sanitize_text_field( (string) $request->get_param( 'reason' ) ) : null;
@@ -550,7 +574,7 @@ class RestController {
 	 * @param \WP_REST_Request $request REST request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function handle_action_skip( \WP_REST_Request $request ) {
+	public function handle_action_skip( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$id = (int) $request->get_param( 'id' );
 
 		return $this->action_result( $this->manager->skip( $id ), $id, __( 'Could not skip the next renewal for this subscription.', 'purecart' ) );
@@ -561,7 +585,7 @@ class RestController {
 	 * @param \WP_REST_Request $request REST request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function handle_action_early_renewal( \WP_REST_Request $request ) {
+	public function handle_action_early_renewal( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$result = $this->renewal_engine->early_renewal( (int) $request->get_param( 'id' ) );
 
 		return is_wp_error( $result ) ? $result : rest_ensure_response( $this->prepare_subscription( $this->subscriptions->find( (int) $request->get_param( 'id' ) ) ) );
@@ -572,7 +596,7 @@ class RestController {
 	 * @param \WP_REST_Request $request REST request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function handle_action_resubscribe( \WP_REST_Request $request ) {
+	public function handle_action_resubscribe( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$result = $this->manager->resubscribe( (int) $request->get_param( 'id' ) );
 
 		if ( ! $result ) {
@@ -587,7 +611,7 @@ class RestController {
 	 * @param \WP_REST_Request $request REST request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function handle_action_upgrade( \WP_REST_Request $request ) {
+	public function handle_action_upgrade( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$id             = (int) $request->get_param( 'id' );
 		$new_product_id = absint( $request->get_param( 'product_id' ) );
 		$mode           = $request->get_param( 'mode' ) ? sanitize_key( (string) $request->get_param( 'mode' ) ) : null;
@@ -608,7 +632,7 @@ class RestController {
 	 * @param string $error_msg Message to use if it failed.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	private function action_result( bool $success, int $id, string $error_msg ) {
+	private function action_result( bool $success, int $id, string $error_msg ): \WP_REST_Response|\WP_Error {
 		if ( ! $success ) {
 			return new \WP_Error( 'purecart_action_failed', $error_msg, array( 'status' => 400 ) );
 		}
@@ -632,7 +656,7 @@ class RestController {
 	 * @param \WP_REST_Request $request REST request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function handle_action_renew( \WP_REST_Request $request ) {
+	public function handle_action_renew( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$id     = (int) $request->get_param( 'id' );
 		$result = $this->renewal_engine->early_renewal( $id );
 
@@ -646,7 +670,7 @@ class RestController {
 	 * @param \WP_REST_Request $request REST request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function handle_retry_payment( \WP_REST_Request $request ) {
+	public function handle_retry_payment( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$id = (int) $request->get_param( 'id' );
 		if ( ! $this->subscriptions->find( $id ) ) {
 			return $this->not_found();
@@ -669,7 +693,7 @@ class RestController {
 	 * @param \WP_REST_Request $request REST request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function handle_send_card_update( \WP_REST_Request $request ) {
+	public function handle_send_card_update( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$id = (int) $request->get_param( 'id' );
 
 		$token = $this->dunning->generate_card_update_token( $id );
@@ -712,7 +736,7 @@ class RestController {
 	 * @param \WP_REST_Request $request REST request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function get_cancellation_offers( \WP_REST_Request $request ) {
+	public function get_cancellation_offers( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$id     = (int) $request->get_param( 'id' );
 		$reason = sanitize_key( (string) $request->get_param( 'reason' ) );
 
@@ -730,7 +754,7 @@ class RestController {
 	 * @param \WP_REST_Request $request REST request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function accept_cancellation_offer( \WP_REST_Request $request ) {
+	public function accept_cancellation_offer( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$id         = (int) $request->get_param( 'id' );
 		$offer_type = sanitize_key( (string) $request->get_param( 'offer_type' ) );
 		$reason     = sanitize_key( (string) $request->get_param( 'reason' ) );
@@ -749,7 +773,7 @@ class RestController {
 	 * @param \WP_REST_Request $request REST request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function handle_external_renewal( \WP_REST_Request $request ) {
+	public function handle_external_renewal( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$verified = $this->verify_webhook_request( $request );
 		if ( is_wp_error( $verified ) ) {
 			return $verified;
@@ -774,7 +798,7 @@ class RestController {
 	 * @param \WP_REST_Request $request REST request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function handle_webhook_event( \WP_REST_Request $request ) {
+	public function handle_webhook_event( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$verified = $this->verify_webhook_request( $request );
 		if ( is_wp_error( $verified ) ) {
 			return $verified;
@@ -796,7 +820,7 @@ class RestController {
 	 * @param \WP_REST_Request $request REST request.
 	 * @return array<string, mixed>|\WP_Error Decoded payload, or a WP_Error (401/400).
 	 */
-	private function verify_webhook_request( \WP_REST_Request $request ) {
+	private function verify_webhook_request( \WP_REST_Request $request ): array|\WP_Error {
 		$signature = (string) $request->get_header( 'X-PureCart-Sig' );
 		$raw_body  = (string) $request->get_body();
 

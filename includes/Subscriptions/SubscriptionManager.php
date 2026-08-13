@@ -9,6 +9,9 @@ declare( strict_types=1 );
 
 namespace PureCart\Subscriptions;
 
+use PureCart\Settings\OptionKeys;
+use PureCart\Settings\Settings;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -231,7 +234,7 @@ class SubscriptionManager {
 	 * @return bool
 	 */
 	private function has_used_trial( int $user_id, int $product_id ): bool {
-		if ( ! (bool) get_option( 'purecart_sub_one_trial_per_customer', true ) ) {
+		if ( ! (bool) Settings::get( OptionKeys::SUB_ONE_TRIAL_PER_CUSTOMER, true ) ) {
 			return false;
 		}
 
@@ -336,7 +339,7 @@ class SubscriptionManager {
 		// skips to check against, which doesn't exist yet. Simplified here to a
 		// lifetime cap on `skip_count` instead; noted rather than silently
 		// built "wrong" — revisit if/when per-year enforcement is actually needed.
-		$limit = (int) get_option( 'purecart_sub_skip_limit', 1 );
+		$limit = (int) Settings::get( OptionKeys::SUB_SKIP_LIMIT, 1 );
 		if ( $limit > 0 && (int) $subscription->skip_count >= $limit ) {
 			return false;
 		}
@@ -505,7 +508,7 @@ class SubscriptionManager {
 		// New option, not present in any prior R&D doc's Configuration Options
 		// table — introduced here because the feature doc requires an
 		// "admin-configurable" window but never names the option itself.
-		$window_days = (int) get_option( 'purecart_sub_resubscribe_window_days', 30 );
+		$window_days = (int) Settings::get( OptionKeys::SUB_RESUBSCRIBE_WINDOW_DAYS, 30 );
 
 		$now           = current_time( 'mysql' );
 		$ended_at      = $subscription->cancelled_at ?: $subscription->updated_at;

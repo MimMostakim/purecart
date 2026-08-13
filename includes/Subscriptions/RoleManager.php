@@ -10,6 +10,9 @@ declare( strict_types=1 );
 
 namespace PureCart\Subscriptions;
 
+use PureCart\Settings\OptionKeys;
+use PureCart\Settings\Settings;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -145,7 +148,7 @@ class RoleManager {
 	 * @return string
 	 */
 	private static function trial_role(): string {
-		return (string) get_option( 'purecart_sub_trial_role', '' );
+		return (string) Settings::get( OptionKeys::SUB_TRIAL_ROLE, '' );
 	}
 
 	/**
@@ -153,7 +156,7 @@ class RoleManager {
 	 * @return string
 	 */
 	private static function active_role(): string {
-		return (string) get_option( 'purecart_sub_active_role', '' );
+		return (string) Settings::get( OptionKeys::SUB_ACTIVE_ROLE, '' );
 	}
 
 	/**
@@ -161,7 +164,7 @@ class RoleManager {
 	 * @return string
 	 */
 	private static function cancelled_role(): string {
-		return (string) get_option( 'purecart_sub_cancelled_role', '' );
+		return (string) Settings::get( OptionKeys::SUB_CANCELLED_ROLE, '' );
 	}
 
 	/**

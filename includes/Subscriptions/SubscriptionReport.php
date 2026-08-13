@@ -10,6 +10,9 @@ declare( strict_types=1 );
 
 namespace PureCart\Subscriptions;
 
+use PureCart\Settings\OptionKeys;
+use PureCart\Settings\Settings;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -323,7 +326,7 @@ class SubscriptionReport {
 	 * @return int
 	 */
 	private function avg_lifetime_months(): int {
-		return max( 1, (int) get_option( 'purecart_sub_avg_lifetime_months', 24 ) );
+		return max( 1, (int) Settings::get( OptionKeys::SUB_AVG_LIFETIME_MONTHS, 24 ) );
 	}
 
 	// -----------------------------------------------------------------------

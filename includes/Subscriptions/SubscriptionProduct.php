@@ -16,6 +16,9 @@ declare( strict_types=1 );
 
 namespace PureCart\Subscriptions;
 
+use PureCart\Settings\OptionKeys;
+use PureCart\Settings\Settings;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -612,7 +615,7 @@ class SubscriptionProduct {
 			}
 		}
 
-		if ( ! (bool) get_option( 'purecart_sub_allow_multiple_subscriptions', true ) ) {
+		if ( ! (bool) Settings::get( OptionKeys::SUB_ALLOW_MULTIPLE_SUBSCRIPTIONS, true ) ) {
 			foreach ( $existing as $subscription ) {
 				if ( in_array( $subscription->status, $open_statuses, true ) && (int) $subscription->product_id !== $product_id ) {
 					wc_add_notice( __( 'You can only have one active subscription at a time.', 'purecart' ), 'error' );

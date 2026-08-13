@@ -3,30 +3,24 @@
  *
  * Renders the admin panel top navigation bar containing a breadcrumb trail,
  * page title, help and notification icon buttons, and a user avatar chip.
- * Builds the breadcrumb dynamically based on the active page identifier.
+ * Breadcrumbs are derived from PAGE_PARENT — child pages show their parent
+ * as a clickable crumb; root pages show only "PureCart".
  *
  * @file
  * @since 1.0.0
  */
 import { ChevronRight, HelpCircle, Bell } from 'lucide-react';
-import { M3, PAGE_TITLES } from '../../utils/static-data';
+import { M3, PAGE_TITLES, PAGE_PARENT } from '../../utils/static-data';
 import type { Page } from '../../utils/static-data';
 import { IconButton } from './IconButton';
 
 /**
- * Renders the fixed-height top bar with breadcrumb navigation and utility actions.
- *
- * Breadcrumb segments are derived from the current page value. Clickable
- * segments call onNav with the target page identifier. The final segment
- * is always non-clickable.
+ * Fixed-height top bar with breadcrumb navigation and utility actions.
  *
  * @since 1.0.0
  *
- * @param {Object}   props       Component props.
- * @param {Page}     props.page  The currently active page identifier used to build breadcrumbs and title.
- * @param {Function} props.onNav Callback invoked with a target Page when a breadcrumb link is clicked.
- *
- * @return {JSX.Element} The header top bar element.
+ * @param props.page  The currently active page identifier.
+ * @param props.onNav Callback invoked with a target Page when a breadcrumb link is clicked.
  */
 export function TopBar( {
 	page,
@@ -35,11 +29,18 @@ export function TopBar( {
 	page: Page;
 	onNav: ( p: Page ) => void;
 } ) {
+	// Build breadcrumb segments: root → optional parent → current page
 	const crumbs: Array< { label: string; page?: Page } > = [
-		{ label: 'PureCart -  Digital Downloads' },
+		{ label: 'PureCart' },
 	];
-	if ( page === 'subscription-analytics' ) {
-		crumbs.push( { label: 'Subscriptions', page: 'subscriptions' } );
+
+	const parentPage = PAGE_PARENT[ page ];
+	if ( parentPage ) {
+		crumbs.push( { label: PAGE_TITLES[ parentPage ], page: parentPage } );
+	}
+
+	// Only add the leaf crumb for child pages (where the breadcrumb is meaningful)
+	if ( parentPage ) {
 		crumbs.push( { label: PAGE_TITLES[ page ] } );
 	}
 
@@ -53,12 +54,10 @@ export function TopBar( {
 			} }
 		>
 			<div className="flex-1 min-w-0">
+				{ /* Breadcrumb */ }
 				<div
 					className="flex items-center gap-1 text-xs"
-					style={ {
-						color: M3.onSurfaceVariant,
-						fontFamily: 'Roboto, sans-serif',
-					} }
+					style={ { color: M3.onSurfaceVariant, fontFamily: 'Roboto, sans-serif' } }
 				>
 					{ crumbs.map( ( c, i ) => (
 						<span key={ i } className="flex items-center gap-1">
@@ -84,17 +83,22 @@ export function TopBar( {
 						</span>
 					) ) }
 				</div>
+
+				{ /* Page title */ }
 				<h1
 					className="font-medium leading-tight"
 					style={ {
 						fontSize: 22,
 						color: M3.onSurface,
 						fontFamily: 'Roboto, sans-serif',
+						margin: 0,
 					} }
 				>
 					{ PAGE_TITLES[ page ] }
 				</h1>
 			</div>
+
+			{ /* Actions */ }
 			<div className="flex items-center gap-1">
 				<IconButton icon={ HelpCircle } title="Help" />
 				<IconButton icon={ Bell } title="Notifications" />
