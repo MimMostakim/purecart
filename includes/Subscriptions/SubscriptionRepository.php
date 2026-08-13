@@ -30,56 +30,56 @@ class SubscriptionRepository {
 	 * @var array<string,string>
 	 */
 	private const COLUMN_FORMATS = array(
-		'user_id'                  => '%d',
-		'product_id'               => '%d',
-		'order_id'                 => '%d',
-		'license_id'               => '%d',
-		'saas_account_id'          => '%d',
-		'delivery_type'            => '%s',
-		'status'                   => '%s',
-		'billing_interval'         => '%d',
-		'billing_period'           => '%s',
-		'recurring_amount'         => '%f',
-		'currency'                 => '%s',
-		'signup_fee'               => '%f',
-		'trial_ends_at'            => '%s',
-		'next_payment_at'          => '%s',
-		'last_payment_at'          => '%s',
-		'max_length_at'            => '%s',
-		'paused_at'                => '%s',
-		'pause_end_date'           => '%s',
-		'suspended_at'             => '%s',
-		'cancelled_at'             => '%s',
-		'cancellation_date'        => '%s',
-		'gateway'                  => '%s',
-		'gateway_subscription_id'  => '%s',
-		'payment_token_id'         => '%d',
-		'retry_count'              => '%d',
-		'renewal_count'            => '%d',
-		'skip_count'               => '%d',
-		'max_renewals'             => '%d',
-		'payment_type'             => '%s',
-		'max_payments'             => '%d',
-		'access_timing'            => '%s',
-		'access_duration_value'    => '%d',
-		'access_duration_unit'     => '%s',
-		'access_end_date'          => '%s',
-		'step_price'               => '%f',
-		'step_after'               => '%d',
-		'discount_percent'             => '%f',
-		'discount_renewals_remaining'  => '%d',
-		'churn_risk_score'         => '%d',
-		'customer_ltv'             => '%f',
-		'pending_switch_product'   => '%d',
-		'pending_switch_type'      => '%s',
-		'shipping_amount'          => '%f',
-		'shipping_method'          => '%s',
-		'billing_address'          => '%s',
-		'shipping_address'         => '%s',
-		'previous_subscription_id' => '%d',
-		'starts_at'                => '%s',
-		'created_at'               => '%s',
-		'updated_at'               => '%s',
+		'user_id'                     => '%d',
+		'product_id'                  => '%d',
+		'order_id'                    => '%d',
+		'license_id'                  => '%d',
+		'saas_account_id'             => '%d',
+		'delivery_type'               => '%s',
+		'status'                      => '%s',
+		'billing_interval'            => '%d',
+		'billing_period'              => '%s',
+		'recurring_amount'            => '%f',
+		'currency'                    => '%s',
+		'signup_fee'                  => '%f',
+		'trial_ends_at'               => '%s',
+		'next_payment_at'             => '%s',
+		'last_payment_at'             => '%s',
+		'max_length_at'               => '%s',
+		'paused_at'                   => '%s',
+		'pause_end_date'              => '%s',
+		'suspended_at'                => '%s',
+		'cancelled_at'                => '%s',
+		'cancellation_date'           => '%s',
+		'gateway'                     => '%s',
+		'gateway_subscription_id'     => '%s',
+		'payment_token_id'            => '%d',
+		'retry_count'                 => '%d',
+		'renewal_count'               => '%d',
+		'skip_count'                  => '%d',
+		'max_renewals'                => '%d',
+		'payment_type'                => '%s',
+		'max_payments'                => '%d',
+		'access_timing'               => '%s',
+		'access_duration_value'       => '%d',
+		'access_duration_unit'        => '%s',
+		'access_end_date'             => '%s',
+		'step_price'                  => '%f',
+		'step_after'                  => '%d',
+		'discount_percent'            => '%f',
+		'discount_renewals_remaining' => '%d',
+		'churn_risk_score'            => '%d',
+		'customer_ltv'                => '%f',
+		'pending_switch_product'      => '%d',
+		'pending_switch_type'         => '%s',
+		'shipping_amount'             => '%f',
+		'shipping_method'             => '%s',
+		'billing_address'             => '%s',
+		'shipping_address'            => '%s',
+		'previous_subscription_id'    => '%d',
+		'starts_at'                   => '%s',
+		'created_at'                  => '%s',
+		'updated_at'                  => '%s',
 	);
 
 	/** Required columns for a valid new subscription row. */
@@ -133,8 +133,8 @@ class SubscriptionRepository {
 	public function create( array $data ): ?object {
 		global $wpdb;
 
-		$now  = current_time( 'mysql' );
-		$data = wp_parse_args(
+		$now                = current_time( 'mysql' );
+		$data               = wp_parse_args(
 			$data,
 			array(
 				'delivery_type' => 'software',
@@ -163,7 +163,7 @@ class SubscriptionRepository {
 	 * Update an existing subscription row. `updated_at` is always refreshed.
 	 *
 	 * @since 1.0.0
-	 * @param int                   $id   Subscription row ID.
+	 * @param int                  $id   Subscription row ID.
 	 * @param array<string, mixed> $data Column => value pairs to change.
 	 * @return bool
 	 */
@@ -406,9 +406,9 @@ class SubscriptionRepository {
 	 * trial-conversion denominator when filtered to trials.
 	 *
 	 * @since 1.0.0
-	 * @param string      $start       Inclusive range start (MySQL datetime).
-	 * @param string      $end         Inclusive range end (MySQL datetime).
-	 * @param bool        $trials_only Count only subscriptions that began with a trial.
+	 * @param string $start       Inclusive range start (MySQL datetime).
+	 * @param string $end         Inclusive range end (MySQL datetime).
+	 * @param bool   $trials_only Count only subscriptions that began with a trial.
 	 * @return int
 	 */
 	public function count_created_between( string $start, string $end, bool $trials_only = false ): int {

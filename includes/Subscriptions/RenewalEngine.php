@@ -358,7 +358,13 @@ class RenewalEngine {
 		if ( ! $new_product ) {
 			// Configured product no longer exists — clear the pending switch
 			// rather than trying (and failing) to apply it every cycle forever.
-			$this->subscriptions->update( (int) $subscription->id, array( 'pending_switch_product' => null, 'pending_switch_type' => null ) );
+			$this->subscriptions->update(
+				(int) $subscription->id,
+				array(
+					'pending_switch_product' => null,
+					'pending_switch_type'    => null,
+				)
+			);
 			return $this->subscriptions->find( (int) $subscription->id ) ?? $subscription;
 		}
 
@@ -577,10 +583,14 @@ class RenewalEngine {
 			return null;
 		}
 
-		$order->add_product( $product, 1, array(
-			'subtotal' => $amount,
-			'total'    => $amount,
-		) );
+		$order->add_product(
+			$product,
+			1,
+			array(
+				'subtotal' => $amount,
+				'total'    => $amount,
+			)
+		);
 
 		if ( ! empty( $subscription->billing_address ) ) {
 			$address = json_decode( (string) $subscription->billing_address, true );
@@ -633,9 +643,9 @@ class RenewalEngine {
 	 * post-renewal side effects (license/SaaS extension, etc.) on success.
 	 *
 	 * @since 1.0.0
-	 * @param object        $subscription Subscription row.
+	 * @param object         $subscription Subscription row.
 	 * @param \WC_Order|null $order       The renewal order, or null for a zero-total renewal.
-	 * @param string        $note         Log note.
+	 * @param string         $note         Log note.
 	 * @return void
 	 */
 	private function complete_renewal( object $subscription, ?\WC_Order $order, string $note ): void {
@@ -843,7 +853,7 @@ class RenewalEngine {
 	 * that gateway's webhook rather than initiated by process_renewal().
 	 *
 	 * @since 1.0.0
-	 * @param int                  $subscription_id Subscription row ID.
+	 * @param int                                           $subscription_id Subscription row ID.
 	 * @param array{transaction_id: string, amount?: float} $data Renewal data from the webhook.
 	 * @return bool True if recorded, false if the subscription/transaction was invalid or already recorded.
 	 */

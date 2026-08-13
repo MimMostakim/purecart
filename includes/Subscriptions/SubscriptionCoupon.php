@@ -86,8 +86,8 @@ class SubscriptionCoupon {
 				'label'       => __( 'PureCart subscription scope', 'purecart' ),
 				'value'       => get_post_meta( $coupon_id, '_purecart_coupon_scope', true ) ?: '',
 				'options'     => array(
-					''                       => __( 'Not a subscription coupon (normal behaviour)', 'purecart' ),
-					self::SCOPE_SIGNUP_FEE   => __( 'Sign-up fee only (first order)', 'purecart' ),
+					''                        => __( 'Not a subscription coupon (normal behaviour)', 'purecart' ),
+					self::SCOPE_SIGNUP_FEE    => __( 'Sign-up fee only (first order)', 'purecart' ),
 					self::SCOPE_RECURRING_FEE => __( 'Recurring fee (renewals)', 'purecart' ),
 				),
 				'description' => __( 'Only applies to PureCart subscription products; ignored on any other product.', 'purecart' ),
@@ -100,7 +100,10 @@ class SubscriptionCoupon {
 				'id'                => 'purecart_coupon_cycles',
 				'label'             => __( 'Applies for how many renewals', 'purecart' ),
 				'type'              => 'number',
-				'custom_attributes' => array( 'min' => '0', 'step' => '1' ),
+				'custom_attributes' => array(
+					'min'  => '0',
+					'step' => '1',
+				),
 				'value'             => get_post_meta( $coupon_id, '_purecart_coupon_cycles', true ) ?: '0',
 				'description'       => __( 'Only used for the "Recurring fee" scope. 0 = applies forever.', 'purecart' ),
 				'desc_tip'          => true,

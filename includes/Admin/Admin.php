@@ -16,15 +16,15 @@ declare(strict_types=1);
 
 namespace PureCart\Admin;
 
-defined('ABSPATH') || exit;
+defined( 'ABSPATH' ) || exit;
 
 /**
  * Admin panel: menus, asset enqueue, product meta boxes, settings.
  *
  * @since 1.0.0
  */
-class Admin
-{
+class Admin {
+
 
 	/**
 	 * WP admin page slug → React page name.
@@ -54,12 +54,11 @@ class Admin
 	 *
 	 * @since 1.0.0
 	 */
-	public function __construct()
-	{
-		add_action('admin_menu', array($this, 'register_menus'));
-		add_action('admin_enqueue_scripts', array($this, 'enqueue_assets'));
-		add_action('save_post_product', array($this, 'save_product_meta'));
-		add_filter('plugin_action_links_' . PURECART_BASENAME, array($this, 'action_links'));
+	public function __construct() {
+		add_action( 'admin_menu', array( $this, 'register_menus' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		add_action( 'save_post_product', array( $this, 'save_product_meta' ) );
+		add_filter( 'plugin_action_links_' . PURECART_BASENAME, array( $this, 'action_links' ) );
 	}
 
 	/**
@@ -72,11 +71,10 @@ class Admin
 	 * @since 1.0.0
 	 * @return void
 	 */
-	public function register_menus(): void
-	{
+	public function register_menus(): void {
 		add_menu_page(
-			__('PureCart', 'purecart'),
-			__('PureCart', 'purecart'),
+			__( 'PureCart', 'purecart' ),
+			__( 'PureCart', 'purecart' ),
 			'manage_woocommerce',
 			'purecart-dashboard',
 			fn() => $this->render_react_root(),
@@ -88,24 +86,24 @@ class Admin
 		// The first entry reuses the parent slug to rename the default
 		// "PureCart" submenu item to "Overview" in the WP sidebar.
 		$nav_items = array(
-			array('purecart-dashboard',      __('Overview',       'purecart'), 'manage_woocommerce'),
-			array('purecart-licenses',       __('Licenses',       'purecart'), 'manage_woocommerce'),
-			array('purecart-downloads',      __('Downloads',      'purecart'), 'manage_woocommerce'),
-			array('purecart-updates',        __('Updates',        'purecart'), 'manage_woocommerce'),
-			array('purecart-subscriptions',  __('Subscriptions',  'purecart'), 'manage_woocommerce'),
-			array('purecart-saas-accounts',  __('SaaS Accounts',  'purecart'), 'manage_woocommerce'),
-			array('purecart-affiliates',     __('Affiliates',     'purecart'), 'manage_woocommerce'),
-			array('purecart-abandoned-cart', __('Abandoned Cart', 'purecart'), 'manage_woocommerce'),
-			array('purecart-security',       __('Security',       'purecart'), 'manage_woocommerce'),
-			array('purecart-analytics',      __('Analytics',      'purecart'), 'manage_woocommerce'),
-			array('purecart-settings',       __('Settings',       'purecart'), 'manage_options'),
+			array( 'purecart-dashboard', __( 'Overview', 'purecart' ), 'manage_woocommerce' ),
+			array( 'purecart-licenses', __( 'Licenses', 'purecart' ), 'manage_woocommerce' ),
+			array( 'purecart-downloads', __( 'Downloads', 'purecart' ), 'manage_woocommerce' ),
+			array( 'purecart-updates', __( 'Updates', 'purecart' ), 'manage_woocommerce' ),
+			array( 'purecart-subscriptions', __( 'Subscriptions', 'purecart' ), 'manage_woocommerce' ),
+			array( 'purecart-saas-accounts', __( 'SaaS Accounts', 'purecart' ), 'manage_woocommerce' ),
+			array( 'purecart-affiliates', __( 'Affiliates', 'purecart' ), 'manage_woocommerce' ),
+			array( 'purecart-abandoned-cart', __( 'Abandoned Cart', 'purecart' ), 'manage_woocommerce' ),
+			array( 'purecart-security', __( 'Security', 'purecart' ), 'manage_woocommerce' ),
+			array( 'purecart-analytics', __( 'Analytics', 'purecart' ), 'manage_woocommerce' ),
+			array( 'purecart-settings', __( 'Settings', 'purecart' ), 'manage_options' ),
 		);
 
-		foreach ($nav_items as list($slug, $label, $capability)) {
+		foreach ( $nav_items as list($slug, $label, $capability) ) {
 			add_submenu_page(
 				'purecart-dashboard',
 				/* translators: %s = module name */
-				sprintf(__('%s — PureCart', 'purecart'), $label),
+				sprintf( __( '%s — PureCart', 'purecart' ), $label ),
 				$label,
 				$capability,
 				$slug,
@@ -124,7 +122,7 @@ class Admin
 	 * @since 1.0.0
 	 * @return void
 	 */
-	private function render_react_root(): void{
+	private function render_react_root(): void {
 		?>
 			<div id="purecart-root"></div>
 		<?php
@@ -142,26 +140,29 @@ class Admin
 	 * @param string $hook Current admin page hook suffix.
 	 * @return void
 	 */
-	public function enqueue_assets(string $hook): void
-	{
+	public function enqueue_assets( string $hook ): void {
 		// Product edit pages
-		if ('post.php' === $hook || 'post-new.php' === $hook) {
-			wp_enqueue_style('purecart-admin', PURECART_URL . 'assets/css/admin.css', array(), PURECART_VERSION);
-			wp_enqueue_script('purecart-admin', PURECART_URL . 'assets/js/admin.js', array('jquery'), PURECART_VERSION, true);
-			wp_localize_script('purecart-admin', 'purecartAdmin', array(
-				'nonce' => wp_create_nonce('purecart_admin_nonce'),
-			));
+		if ( 'post.php' === $hook || 'post-new.php' === $hook ) {
+			wp_enqueue_style( 'purecart-admin', PURECART_URL . 'assets/css/admin.css', array(), PURECART_VERSION );
+			wp_enqueue_script( 'purecart-admin', PURECART_URL . 'assets/js/admin.js', array( 'jquery' ), PURECART_VERSION, true );
+			wp_localize_script(
+				'purecart-admin',
+				'purecartAdmin',
+				array(
+					'nonce' => wp_create_nonce( 'purecart_admin_nonce' ),
+				)
+			);
 			return;
 		}
 
 		// React SPA pages
 		// All purecart pages share the same hook prefix or top-level hook.
-		if (strpos($hook, 'purecart') === false) {
+		if ( strpos( $hook, 'purecart' ) === false ) {
 			return;
 		}
 
 		$asset_file = PURECART_PATH . 'build/admin/app/app.asset.php';
-		if (! file_exists($asset_file)) {
+		if ( ! file_exists( $asset_file ) ) {
 			return;
 		}
 
@@ -184,16 +185,16 @@ class Admin
 
 		// Determine which React page to show on initial load from the WP slug.
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading page slug for routing only, not processing form data.
-		$wp_slug      = isset($_GET['page']) ? sanitize_key($_GET['page']) : 'purecart-dashboard';
-		$current_page = self::SLUG_TO_PAGE[$wp_slug] ?? 'overview';
+		$wp_slug      = isset( $_GET['page'] ) ? sanitize_key( $_GET['page'] ) : 'purecart-dashboard';
+		$current_page = self::SLUG_TO_PAGE[ $wp_slug ] ?? 'overview';
 
 		wp_localize_script(
 			'purecart-app',
 			'purecartAdmin',
 			array(
-				'nonce'       => wp_create_nonce('purecart_admin_nonce'),
-				'restNonce'   => wp_create_nonce('wp_rest'),
-				'apiUrl'      => esc_url_raw(rest_url(PURECART_API_NAMESPACE . '/')),
+				'nonce'       => wp_create_nonce( 'purecart_admin_nonce' ),
+				'restNonce'   => wp_create_nonce( 'wp_rest' ),
+				'apiUrl'      => esc_url_raw( rest_url( PURECART_API_NAMESPACE . '/' ) ),
 				'currentPage' => $current_page,
 				'version'     => PURECART_VERSION,
 			)
@@ -212,13 +213,13 @@ class Admin
 	 */
 	private function enqueue_menu_router(): void {
 		$asset_router_file = PURECART_PATH . 'build/admin/menu-router/menu-router.asset.php';
-		if (! file_exists($asset_router_file)) {
+		if ( ! file_exists( $asset_router_file ) ) {
 			return;
 		}
 		wp_register_script(
 			'purecart-menu-router',
 			PURECART_URL . 'build/admin/menu-router/menu-router.js',
-			array('purecart-app'),
+			array( 'purecart-app' ),
 			PURECART_VERSION,
 			true
 		);
@@ -241,7 +242,7 @@ class Admin
 			)
 		);
 
-		wp_enqueue_script('purecart-menu-router');
+		wp_enqueue_script( 'purecart-menu-router' );
 	}
 	// ─────────────────────────────────────────────────────────────────────────────
 	// Product meta box (WooCommerce product edit screen)
@@ -253,12 +254,11 @@ class Admin
 	 * @since 1.0.0
 	 * @return void
 	 */
-	public function meta_boxes(): void
-	{
+	public function meta_boxes(): void {
 		add_meta_box(
 			'purecart_product_settings',
-			__('PureCart Settings', 'purecart'),
-			array($this, 'render_product_meta_box'),
+			__( 'PureCart Settings', 'purecart' ),
+			array( $this, 'render_product_meta_box' ),
 			'product',
 			'normal',
 			'high'
@@ -272,74 +272,73 @@ class Admin
 	 * @param \WP_Post $post The current product post object.
 	 * @return void
 	 */
-	public function render_product_meta_box(\WP_Post $post): void
-	{
-		wp_nonce_field('purecart_save_product_meta', 'purecart_product_nonce');
+	public function render_product_meta_box( \WP_Post $post ): void {
+		wp_nonce_field( 'purecart_save_product_meta', 'purecart_product_nonce' );
 
-		$product      = wc_get_product($post->ID);
-		$license_type = $product ? $product->get_meta('_purecart_license_type') : 'single';
-		$act_limit    = $product ? $product->get_meta('_purecart_activation_limit') : 1;
-		$duration     = $product ? $product->get_meta('_purecart_license_duration_days') : 365;
-		$plugin_slug  = $product ? $product->get_meta('_purecart_plugin_slug') : '';
-		$saas_plan    = $product ? $product->get_meta('_purecart_saas_plan') : 'starter';
+		$product      = wc_get_product( $post->ID );
+		$license_type = $product ? $product->get_meta( '_purecart_license_type' ) : 'single';
+		$act_limit    = $product ? $product->get_meta( '_purecart_activation_limit' ) : 1;
+		$duration     = $product ? $product->get_meta( '_purecart_license_duration_days' ) : 365;
+		$plugin_slug  = $product ? $product->get_meta( '_purecart_plugin_slug' ) : '';
+		$saas_plan    = $product ? $product->get_meta( '_purecart_saas_plan' ) : 'starter';
 
-	?>
+		?>
 		<table class="form-table purecart-meta-table">
 			<tr>
-				<th><label for="purecart_license_type"><?php esc_html_e('License Type', 'purecart'); ?></label></th>
+				<th><label for="purecart_license_type"><?php esc_html_e( 'License Type', 'purecart' ); ?></label></th>
 				<td>
 					<select id="purecart_license_type" name="purecart_license_type">
 						<?php
 						foreach (
 							array(
-								'single'    => __('Single Site', 'purecart'),
-								'multi'     => __('Multi Site', 'purecart'),
-								'unlimited' => __('Unlimited Sites', 'purecart'),
-								'lifetime'  => __('Lifetime (No Expiry)', 'purecart'),
+								'single'    => __( 'Single Site', 'purecart' ),
+								'multi'     => __( 'Multi Site', 'purecart' ),
+								'unlimited' => __( 'Unlimited Sites', 'purecart' ),
+								'lifetime'  => __( 'Lifetime (No Expiry)', 'purecart' ),
 							) as $val => $label
 						) :
-						?>
-							<option value="<?php echo esc_attr($val); ?>" <?php selected($license_type, $val); ?>>
-								<?php echo esc_html($label); ?>
+							?>
+							<option value="<?php echo esc_attr( $val ); ?>" <?php selected( $license_type, $val ); ?>>
+								<?php echo esc_html( $label ); ?>
 							</option>
 						<?php endforeach; ?>
 					</select>
 				</td>
 			</tr>
 			<tr>
-				<th><label for="purecart_activation_limit"><?php esc_html_e('Activation Limit', 'purecart'); ?></label></th>
+				<th><label for="purecart_activation_limit"><?php esc_html_e( 'Activation Limit', 'purecart' ); ?></label></th>
 				<td>
 					<input type="number" id="purecart_activation_limit" name="purecart_activation_limit"
-						value="<?php echo esc_attr($act_limit); ?>" min="1" class="small-text">
-					<p class="description"><?php esc_html_e('Number of sites the license can be activated on.', 'purecart'); ?></p>
+						value="<?php echo esc_attr( $act_limit ); ?>" min="1" class="small-text">
+					<p class="description"><?php esc_html_e( 'Number of sites the license can be activated on.', 'purecart' ); ?></p>
 				</td>
 			</tr>
 			<tr>
-				<th><label for="purecart_license_duration_days"><?php esc_html_e('License Duration (days)', 'purecart'); ?></label></th>
+				<th><label for="purecart_license_duration_days"><?php esc_html_e( 'License Duration (days)', 'purecart' ); ?></label></th>
 				<td>
 					<input type="number" id="purecart_license_duration_days" name="purecart_license_duration_days"
-						value="<?php echo esc_attr($duration); ?>" min="1" class="small-text">
-					<p class="description"><?php esc_html_e('Set 365 for 1 year. Ignored for "Lifetime" type.', 'purecart'); ?></p>
+						value="<?php echo esc_attr( $duration ); ?>" min="1" class="small-text">
+					<p class="description"><?php esc_html_e( 'Set 365 for 1 year. Ignored for "Lifetime" type.', 'purecart' ); ?></p>
 				</td>
 			</tr>
 			<tr>
-				<th><label for="purecart_plugin_slug"><?php esc_html_e('Plugin Slug', 'purecart'); ?></label></th>
+				<th><label for="purecart_plugin_slug"><?php esc_html_e( 'Plugin Slug', 'purecart' ); ?></label></th>
 				<td>
 					<input type="text" id="purecart_plugin_slug" name="purecart_plugin_slug"
-						value="<?php echo esc_attr($plugin_slug); ?>" class="regular-text">
-					<p class="description"><?php esc_html_e('Used for the auto-update API endpoint.', 'purecart'); ?></p>
+						value="<?php echo esc_attr( $plugin_slug ); ?>" class="regular-text">
+					<p class="description"><?php esc_html_e( 'Used for the auto-update API endpoint.', 'purecart' ); ?></p>
 				</td>
 			</tr>
 			<tr>
-				<th><label for="purecart_saas_plan"><?php esc_html_e('SaaS Plan', 'purecart'); ?></label></th>
+				<th><label for="purecart_saas_plan"><?php esc_html_e( 'SaaS Plan', 'purecart' ); ?></label></th>
 				<td>
 					<input type="text" id="purecart_saas_plan" name="purecart_saas_plan"
-						value="<?php echo esc_attr($saas_plan); ?>" class="regular-text">
-					<p class="description"><?php esc_html_e('Plan identifier sent to your SaaS webhook.', 'purecart'); ?></p>
+						value="<?php echo esc_attr( $saas_plan ); ?>" class="regular-text">
+					<p class="description"><?php esc_html_e( 'Plan identifier sent to your SaaS webhook.', 'purecart' ); ?></p>
 				</td>
 			</tr>
 		</table>
-<?php
+		<?php
 	}
 
 	/**
@@ -349,13 +348,12 @@ class Admin
 	 * @param int $post_id The ID of the product post being saved.
 	 * @return void
 	 */
-	public function save_product_meta(int $post_id): void
-	{
+	public function save_product_meta( int $post_id ): void {
 		if (
-			! isset($_POST['purecart_product_nonce'])
-			|| ! wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['purecart_product_nonce'])), 'purecart_save_product_meta')
-			|| (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE)
-			|| ! current_user_can('edit_post', $post_id)
+			! isset( $_POST['purecart_product_nonce'] )
+			|| ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['purecart_product_nonce'] ) ), 'purecart_save_product_meta' )
+			|| ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE )
+			|| ! current_user_can( 'edit_post', $post_id )
 		) {
 			return;
 		}
@@ -368,9 +366,9 @@ class Admin
 			'_purecart_saas_plan'             => 'purecart_saas_plan',
 		);
 
-		foreach ($fields as $meta_key => $post_key) {
-			if (isset($_POST[$post_key])) {
-				update_post_meta($post_id, $meta_key, sanitize_text_field(wp_unslash($_POST[$post_key])));
+		foreach ( $fields as $meta_key => $post_key ) {
+			if ( isset( $_POST[ $post_key ] ) ) {
+				update_post_meta( $post_id, $meta_key, sanitize_text_field( wp_unslash( $_POST[ $post_key ] ) ) );
 			}
 		}
 	}
@@ -386,12 +384,11 @@ class Admin
 	 * @param  string[] $links Existing plugin action links.
 	 * @return string[]
 	 */
-	public function action_links(array $links): array
-	{
+	public function action_links( array $links ): array {
 		$extra = array(
-			'<a href="' . esc_url(admin_url('admin.php?page=purecart-settings')) . '">' . esc_html__('Settings', 'purecart') . '</a>',
-			'<a href="' . esc_url(admin_url('admin.php?page=purecart-licenses')) . '">' . esc_html__('Licenses', 'purecart') . '</a>',
+			'<a href="' . esc_url( admin_url( 'admin.php?page=purecart-settings' ) ) . '">' . esc_html__( 'Settings', 'purecart' ) . '</a>',
+			'<a href="' . esc_url( admin_url( 'admin.php?page=purecart-licenses' ) ) . '">' . esc_html__( 'Licenses', 'purecart' ) . '</a>',
 		);
-		return array_merge($extra, $links);
+		return array_merge( $extra, $links );
 	}
 }

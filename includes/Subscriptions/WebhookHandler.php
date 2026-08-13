@@ -251,7 +251,10 @@ class WebhookHandler {
 		$this->logs->log(
 			$subscription_id,
 			'reauth_required',
-			array( 'old_status' => $subscription->status, 'new_status' => 'pending_reauth' )
+			array(
+				'old_status' => $subscription->status,
+				'new_status' => 'pending_reauth',
+			)
 		);
 
 		do_action( 'purecart_subscription_status_changed', $subscription_id, $subscription->status, 'pending_reauth' );
@@ -288,7 +291,11 @@ class WebhookHandler {
 		$this->logs->log(
 			$subscription_id,
 			'suspended',
-			array( 'old_status' => $subscription->status, 'new_status' => 'suspended', 'note' => 'gateway-reported suspension' )
+			array(
+				'old_status' => $subscription->status,
+				'new_status' => 'suspended',
+				'note'       => 'gateway-reported suspension',
+			)
 		);
 
 		do_action( 'purecart_subscription_status_changed', $subscription_id, $subscription->status, 'suspended' );
@@ -321,7 +328,11 @@ class WebhookHandler {
 		$this->logs->log(
 			(int) $payment->subscription_id,
 			'payment_refunded',
-			array( 'amount' => $refund_amount, 'order_id' => $payment->order_id, 'note' => "transaction_id={$transaction_id}" )
+			array(
+				'amount'   => $refund_amount,
+				'order_id' => $payment->order_id,
+				'note'     => "transaction_id={$transaction_id}",
+			)
 		);
 
 		do_action( 'purecart_subscription_payment_refunded', (int) $payment->subscription_id, $refund_amount );

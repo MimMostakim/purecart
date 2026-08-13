@@ -169,21 +169,24 @@ class SubscriptionProduct {
 				<?php
 				woocommerce_wp_text_input(
 					array(
-						'id'                => '_purecart_sub_price',
-						'label'             => __( 'Recurring price', 'purecart' ) . ' (' . get_woocommerce_currency_symbol() . ')',
-						'data_type'         => 'price',
-						'value'             => $meta( '_purecart_sub_price' ),
+						'id'        => '_purecart_sub_price',
+						'label'     => __( 'Recurring price', 'purecart' ) . ' (' . get_woocommerce_currency_symbol() . ')',
+						'data_type' => 'price',
+						'value'     => $meta( '_purecart_sub_price' ),
 					)
 				);
 				woocommerce_wp_text_input(
 					array(
-						'id'          => '_purecart_sub_interval',
-						'label'       => __( 'Billing interval', 'purecart' ),
-						'type'        => 'number',
-						'custom_attributes' => array( 'min' => '1', 'step' => '1' ),
-						'value'       => $meta( '_purecart_sub_interval', 1 ),
-						'description' => __( 'Bill every N periods, e.g. 3 + Month(s) = every 3 months.', 'purecart' ),
-						'desc_tip'    => true,
+						'id'                => '_purecart_sub_interval',
+						'label'             => __( 'Billing interval', 'purecart' ),
+						'type'              => 'number',
+						'custom_attributes' => array(
+							'min'  => '1',
+							'step' => '1',
+						),
+						'value'             => $meta( '_purecart_sub_interval', 1 ),
+						'description'       => __( 'Bill every N periods, e.g. 3 + Month(s) = every 3 months.', 'purecart' ),
+						'desc_tip'          => true,
 					)
 				);
 				woocommerce_wp_select(
@@ -201,12 +204,12 @@ class SubscriptionProduct {
 				);
 				woocommerce_wp_text_input(
 					array(
-						'id'                => '_purecart_sub_signup_fee',
-						'label'             => __( 'Sign-up fee', 'purecart' ) . ' (' . get_woocommerce_currency_symbol() . ')',
-						'data_type'         => 'price',
-						'value'             => $meta( '_purecart_sub_signup_fee' ),
-						'description'       => __( 'One-time fee on the first payment only. Leave blank for none.', 'purecart' ),
-						'desc_tip'          => true,
+						'id'          => '_purecart_sub_signup_fee',
+						'label'       => __( 'Sign-up fee', 'purecart' ) . ' (' . get_woocommerce_currency_symbol() . ')',
+						'data_type'   => 'price',
+						'value'       => $meta( '_purecart_sub_signup_fee' ),
+						'description' => __( 'One-time fee on the first payment only. Leave blank for none.', 'purecart' ),
+						'desc_tip'    => true,
 					)
 				);
 				?>
@@ -220,7 +223,10 @@ class SubscriptionProduct {
 						'id'                => '_purecart_sub_trial_length',
 						'label'             => __( 'Trial length', 'purecart' ),
 						'type'              => 'number',
-						'custom_attributes' => array( 'min' => '0', 'step' => '1' ),
+						'custom_attributes' => array(
+							'min'  => '0',
+							'step' => '1',
+						),
 						'value'             => $meta( '_purecart_sub_trial_length', 0 ),
 						'description'       => __( '0 = no trial.', 'purecart' ),
 						'desc_tip'          => true,
@@ -249,7 +255,10 @@ class SubscriptionProduct {
 						'id'                => '_purecart_sub_length',
 						'label'             => __( 'Length', 'purecart' ),
 						'type'              => 'number',
-						'custom_attributes' => array( 'min' => '0', 'step' => '1' ),
+						'custom_attributes' => array(
+							'min'  => '0',
+							'step' => '1',
+						),
 						'value'             => $meta( '_purecart_sub_length', 0 ),
 						'description'       => __( '0 = runs indefinitely until cancelled.', 'purecart' ),
 						'desc_tip'          => true,
@@ -271,7 +280,10 @@ class SubscriptionProduct {
 						'id'                => '_purecart_sub_limit',
 						'label'             => __( 'Max active subscriptions per customer', 'purecart' ),
 						'type'              => 'number',
-						'custom_attributes' => array( 'min' => '0', 'step' => '1' ),
+						'custom_attributes' => array(
+							'min'  => '0',
+							'step' => '1',
+						),
 						'value'             => $meta( '_purecart_sub_limit', 0 ),
 						'description'       => __( '0 = unlimited.', 'purecart' ),
 						'desc_tip'          => true,
@@ -315,10 +327,10 @@ class SubscriptionProduct {
 				<?php
 				woocommerce_wp_select(
 					array(
-						'id'      => '_purecart_sub_delivery_type',
-						'label'   => __( 'Delivery type', 'purecart' ),
-						'value'   => $delivery_type,
-						'options' => $this->delivery_type_options(),
+						'id'          => '_purecart_sub_delivery_type',
+						'label'       => __( 'Delivery type', 'purecart' ),
+						'value'       => $delivery_type,
+						'options'     => $this->delivery_type_options(),
 						'description' => __( 'What gets provisioned when this subscription activates.', 'purecart' ),
 						'desc_tip'    => true,
 					)
@@ -328,9 +340,9 @@ class SubscriptionProduct {
 					<?php
 					woocommerce_wp_text_input(
 						array(
-							'id'    => '_purecart_sub_membership_tier',
-							'label' => __( 'Membership tier', 'purecart' ),
-							'value' => $meta( '_purecart_sub_membership_tier' ),
+							'id'          => '_purecart_sub_membership_tier',
+							'label'       => __( 'Membership tier', 'purecart' ),
+							'value'       => $meta( '_purecart_sub_membership_tier' ),
 							'description' => __( 'e.g. Gold, Silver, Bronze.', 'purecart' ),
 							'desc_tip'    => true,
 						)
@@ -344,7 +356,10 @@ class SubscriptionProduct {
 							'id'                => '_purecart_sub_download_limit',
 							'label'             => __( 'Downloads per billing cycle', 'purecart' ),
 							'type'              => 'number',
-							'custom_attributes' => array( 'min' => '0', 'step' => '1' ),
+							'custom_attributes' => array(
+								'min'  => '0',
+								'step' => '1',
+							),
 							'value'             => $meta( '_purecart_sub_download_limit', 0 ),
 							'description'       => __( '0 = unlimited.', 'purecart' ),
 							'desc_tip'          => true,
@@ -418,14 +433,14 @@ class SubscriptionProduct {
 		// Free-text / numeric fields — sanitizer alone is sufficient (no fixed value set to
 		// validate against). absint() also blocks anything non-numeric from reaching the DB.
 		$text_fields = array(
-			'_purecart_sub_price'            => 'wc_format_decimal',
-			'_purecart_sub_interval'         => 'absint',
-			'_purecart_sub_signup_fee'       => 'wc_format_decimal',
-			'_purecart_sub_trial_length'     => 'absint',
-			'_purecart_sub_length'           => 'absint',
-			'_purecart_sub_limit'            => 'absint',
-			'_purecart_sub_membership_tier'  => 'sanitize_text_field',
-			'_purecart_sub_download_limit'   => 'absint',
+			'_purecart_sub_price'             => 'wc_format_decimal',
+			'_purecart_sub_interval'          => 'absint',
+			'_purecart_sub_signup_fee'        => 'wc_format_decimal',
+			'_purecart_sub_trial_length'      => 'absint',
+			'_purecart_sub_length'            => 'absint',
+			'_purecart_sub_limit'             => 'absint',
+			'_purecart_sub_membership_tier'   => 'sanitize_text_field',
+			'_purecart_sub_download_limit'    => 'absint',
 			'_purecart_sub_deliverable_notes' => 'sanitize_textarea_field',
 		);
 

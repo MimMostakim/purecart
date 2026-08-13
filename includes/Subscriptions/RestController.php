@@ -426,8 +426,8 @@ class RestController {
 			return $served;
 		}
 
-		$csv                = $this->pending_csv;
-		$this->pending_csv  = null;
+		$csv               = $this->pending_csv;
+		$this->pending_csv = null;
 
 		if ( ! headers_sent() ) {
 			header( 'Content-Type: text/csv; charset=utf-8' );
@@ -498,9 +498,9 @@ class RestController {
 		// /wc/v3/products request per row — an N+1 the client shouldn't have to
 		// solve. Same join SubscriptionReport::export_row() already does for CSV,
 		// kept consistent here rather than being a second, different shape.
-		$user                    = get_user_by( 'id', (int) $subscription->user_id );
-		$data['customer_name']   = $user ? $user->display_name : '';
-		$data['customer_email']  = $user ? $user->user_email : '';
+		$user                   = get_user_by( 'id', (int) $subscription->user_id );
+		$data['customer_name']  = $user ? $user->display_name : '';
+		$data['customer_email'] = $user ? $user->user_email : '';
 
 		$product              = wc_get_product( (int) $subscription->product_id );
 		$data['product_name'] = $product ? $product->get_name() : '';

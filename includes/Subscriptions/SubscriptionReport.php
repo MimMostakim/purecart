@@ -93,40 +93,40 @@ class SubscriptionReport {
 		$revenue_churn = $this->revenue_churn_rate( $period_start, $period_end );
 
 		return array(
-			'generated_at'         => $now,
-			'period_start'         => $period_start,
-			'period_end'           => $period_end,
+			'generated_at'          => $now,
+			'period_start'          => $period_start,
+			'period_end'            => $period_end,
 
-			'mrr'                  => round( $mrr, 2 ),
-			'arr'                  => round( $mrr * 12, 2 ),
-			'arpu'                 => round( $arpu, 2 ),
-			'ltv'                  => round( $arpu * $this->avg_lifetime_months(), 2 ),
+			'mrr'                   => round( $mrr, 2 ),
+			'arr'                   => round( $mrr * 12, 2 ),
+			'arpu'                  => round( $arpu, 2 ),
+			'ltv'                   => round( $arpu * $this->avg_lifetime_months(), 2 ),
 
-			'active_count'         => $counts['active'] ?? 0,
-			'trialing_count'       => $counts['trialing'] ?? 0,
-			'past_due_count'       => $counts['past_due'] ?? 0,
-			'paused_count'         => $counts['paused'] ?? 0,
-			'suspended_count'      => $counts['suspended'] ?? 0,
-			'cancelled_count'      => $counts['cancelled'] ?? 0,
-			'expired_count'        => $counts['expired'] ?? 0,
-			'pending_cancel_count' => $counts['pending_cancel'] ?? 0,
-			'completed_count'      => $counts['completed'] ?? 0,
-			'total_count'          => array_sum( $counts ),
-			'subscriber_count'     => $subscriber,
-			'counts_by_status'     => $counts,
+			'active_count'          => $counts['active'] ?? 0,
+			'trialing_count'        => $counts['trialing'] ?? 0,
+			'past_due_count'        => $counts['past_due'] ?? 0,
+			'paused_count'          => $counts['paused'] ?? 0,
+			'suspended_count'       => $counts['suspended'] ?? 0,
+			'cancelled_count'       => $counts['cancelled'] ?? 0,
+			'expired_count'         => $counts['expired'] ?? 0,
+			'pending_cancel_count'  => $counts['pending_cancel'] ?? 0,
+			'completed_count'       => $counts['completed'] ?? 0,
+			'total_count'           => array_sum( $counts ),
+			'subscriber_count'      => $subscriber,
+			'counts_by_status'      => $counts,
 
-			'user_churn_rate'      => round( $user_churn, 2 ),
-			'revenue_churn_rate'   => round( $revenue_churn, 2 ),
+			'user_churn_rate'       => round( $user_churn, 2 ),
+			'revenue_churn_rate'    => round( $revenue_churn, 2 ),
 			'trial_conversion_rate' => round( $this->trial_conversion_rate( $period_start, $period_end ), 2 ),
 
-			'churn_bands'          => $this->churn_band_distribution(),
-			'recognized_revenue'   => round( $this->revenue->total_between( substr( $period_start, 0, 10 ), substr( $period_end, 0, 10 ) ), 2 ),
+			'churn_bands'           => $this->churn_band_distribution(),
+			'recognized_revenue'    => round( $this->revenue->total_between( substr( $period_start, 0, 10 ), substr( $period_end, 0, 10 ) ), 2 ),
 			// 12 months back from the period end, for a dashboard trend chart.
-			'revenue_by_month'     => $this->revenue->monthly_totals(
+			'revenue_by_month'      => $this->revenue->monthly_totals(
 				BillingClock::to_dt( $period_end )->modify( '-11 months' )->format( 'Y-m-01' ),
 				substr( $period_end, 0, 10 )
 			),
-			'currency'             => function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'USD',
+			'currency'              => function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'USD',
 		);
 	}
 
@@ -428,10 +428,10 @@ class SubscriptionReport {
 
 		$values['churn_band'] = ChurnScorer::band( (int) $subscription->churn_risk_score );
 
-		$user = get_user_by( 'id', (int) $subscription->user_id );
+		$user                 = get_user_by( 'id', (int) $subscription->user_id );
 		$values['user_email'] = $user ? $user->user_email : '';
 
-		$product = wc_get_product( (int) $subscription->product_id );
+		$product                = wc_get_product( (int) $subscription->product_id );
 		$values['product_name'] = $product ? $product->get_name() : '';
 
 		return $values;
