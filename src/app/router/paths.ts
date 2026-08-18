@@ -11,8 +11,13 @@ export const PAGE_PATHS: Record< Page, string > = {
 	// 'subscription-detail' has no single canonical path — its real route is
 	// `${PAGE_PATHS.subscriptions}/:id` (see SUBSCRIPTION_DETAIL_PATH below).
 	// This entry only exists so PAGE_PATHS satisfies Record<Page, string>.
-	'subscription-detail': '/subscriptions',
-	settings: '/settings',
+	'subscription-detail':    '/subscriptions',
+	'saas-accounts':          '/saas-accounts',
+	'affiliates':             '/affiliates',
+	'abandoned-cart':         '/abandoned-cart',
+	'security':               '/security',
+	'analytics':              '/analytics',
+	'settings':               '/settings',
 };
 
 /** Route pattern for the Subscription Detail page, used by AppRoutes and navigation callers. */
@@ -35,9 +40,9 @@ export const PATH_TO_PAGE: Record< string, Page > = Object.fromEntries(
  * exact-match lookup can't handle on its own.
  */
 export function getPageFromPath( pathname: string ): Page {
-	if ( pathname === PAGE_PATHS.subscriptions ) return 'subscriptions';
-	if ( pathname === PAGE_PATHS[ 'subscription-analytics' ] ) return 'subscription-analytics';
-	if ( pathname === PAGE_PATHS.settings ) return 'settings';
-	if ( pathname.startsWith( `${ PAGE_PATHS.subscriptions }/` ) ) return 'subscription-detail';
-	return 'subscriptions';
+	if ( pathname.startsWith( `${ PAGE_PATHS.subscriptions }/` ) && pathname !== PAGE_PATHS[ 'subscription-analytics' ] ) {
+		return 'subscription-detail';
+	}
+	return PATH_TO_PAGE[ pathname ] ?? 'overview';
 }
+

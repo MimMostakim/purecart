@@ -7,7 +7,7 @@
 
 declare( strict_types=1 );
 
-namespace PureCart\Api;
+namespace PureCart\API;
 
 use PureCart\Subscriptions\SubscriptionRepository;
 use PureCart\Subscriptions\SubscriptionLogRepository;

@@ -1,4 +1,16 @@
-import { Repeat, TrendingUp, Settings as SettingsIcon } from 'lucide-react';
+import {
+	LayoutDashboard,
+	Key,
+	Download,
+	RefreshCcw,
+	Repeat,
+	Cloud,
+	Users,
+	ShoppingCart,
+	Shield,
+	BarChart2,
+	Settings as SettingsIcon,
+} from 'lucide-react';
 import type {
 	SubscriptionRecord,
 	PaymentRecord,
@@ -39,7 +51,20 @@ export const M3 = {
 };
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
-export type Page = 'subscriptions' | 'subscription-analytics' | 'subscription-detail' | 'settings';
+export type Page =
+	| 'overview'
+	| 'licenses'
+	| 'downloads'
+	| 'updates'
+	| 'subscriptions'
+	| 'subscription-analytics'
+	| 'subscription-detail'
+	| 'saas-accounts'
+	| 'affiliates'
+	| 'abandoned-cart'
+	| 'security'
+	| 'analytics'
+	| 'settings';
 
 // ─── Nav items definition ──────────────────────────────────────────────────────
 export const NAV_SCHEMA: Array< {
@@ -49,24 +74,18 @@ export const NAV_SCHEMA: Array< {
 	/** Render a horizontal rule after this item. */
 	dividerAfter?: boolean;
 } > = [
-	{
-		id: 'subscriptions',
-		icon: Repeat,
-		label: 'Subscriptions',
-	},
-	{
-		id: 'subscription-analytics',
-		icon: TrendingUp,
-		label: 'Subscription Analytics',
-	},
-	{
-		id: 'settings',
-		icon: SettingsIcon,
-		label: 'Settings',
-	},
+	{ id: 'overview',       icon: LayoutDashboard, label: 'Overview' },
+	{ id: 'licenses',       icon: Key,             label: 'Licenses' },
+	{ id: 'downloads',      icon: Download,        label: 'Downloads' },
+	{ id: 'updates',        icon: RefreshCcw,      label: 'Updates' },
+	{ id: 'subscriptions',  icon: Repeat,          label: 'Subscriptions' },
+	{ id: 'saas-accounts',  icon: Cloud,           label: 'SaaS Accounts' },
+	{ id: 'affiliates',     icon: Users,           label: 'Affiliates' },
+	{ id: 'abandoned-cart', icon: ShoppingCart,    label: 'Abandoned Cart' },
+	{ id: 'security',       icon: Shield,          label: 'Security' },
+	{ id: 'analytics',      icon: BarChart2,       label: 'Analytics', dividerAfter: true },
+	{ id: 'settings',       icon: SettingsIcon,    label: 'Settings' },
 ];
-// 'subscription-detail' is deliberately absent — it's a drill-down destination
-// (reached by clicking a subscription's ID), not a top-level nav item.
 
 // ─── Page titles ───────────────────────────────────────────────────────────────
 export const PAGE_TITLES: Record< Page, string > = {
@@ -76,8 +95,19 @@ export const PAGE_TITLES: Record< Page, string > = {
 	'updates':                'Updates',
 	'subscriptions':          'Subscriptions',
 	'subscription-analytics': 'Subscription Analytics',
-	'subscription-detail': 'Subscription Detail',
-	settings: 'Settings',
+	'subscription-detail':    'Subscription Detail',
+	'saas-accounts':          'SaaS Accounts',
+	'affiliates':             'Affiliates',
+	'abandoned-cart':         'Abandoned Cart',
+	'security':               'Security',
+	'analytics':              'Analytics',
+	'settings':               'Settings',
+};
+
+// ─── Parent page map (for breadcrumbs) ────────────────────────────────────────
+/** Pages that are children of another page in the breadcrumb trail. */
+export const PAGE_PARENT: Partial< Record< Page, Page > > = {
+	'subscription-analytics': 'subscriptions',
 };
 
 // ─── Subscription sample data ───────────────────────────────────────────────────

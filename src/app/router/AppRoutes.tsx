@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { SubscriptionsPage, SubscriptionDetailPage } from '../components/Subscriptions';
 import { SubscriptionAnalyticsPage } from '../components/Analytics';
 import { SettingsPage } from '../components/Settings';
@@ -27,6 +27,8 @@ import { AnalyticsPage }    from '../components/Analytics/AnalyticsPage';
  * regardless of declaration order.
  */
 export function AppRoutes() {
+	const navigate = useNavigate();
+
 	return (
 		<Routes>
 			{ /* Default redirect to Overview */ }
@@ -64,10 +66,6 @@ export function AppRoutes() {
 				path={ PAGE_PATHS[ 'subscription-analytics' ] }
 				element={ <SubscriptionAnalyticsPage /> }
 			/>
-			<Route
-				path={ PAGE_PATHS.settings }
-				element={ <SettingsPage /> }
-			/>
 
 			{ /* SaaS Accounts */ }
 			<Route path={ PAGE_PATHS[ 'saas-accounts' ] }    element={ <SaasAccountsPage /> } />
@@ -89,3 +87,4 @@ export function AppRoutes() {
 		</Routes>
 	);
 }
+

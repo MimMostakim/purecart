@@ -28,3 +28,4 @@ export { Toast } from './Toast';
 export type { ToastProps } from './Toast';
 export { Toggle } from './Toggle';
 export { StatCard } from './StatCard';
+export { ComingSoon } from './ComingSoon';
