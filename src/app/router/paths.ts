@@ -1,8 +1,12 @@
 import type { Page } from '../utils/static-data';
 
-// ─── Route paths (hash-routed, scoped to the Subscriptions module) ─────────────
+// ─── Route paths (hash-routed) ─────────────────────────────────────────────────
 export const PAGE_PATHS: Record< Page, string > = {
-	subscriptions: '/subscriptions',
+	'overview':               '/overview',
+	'licenses':               '/licenses',
+	'downloads':              '/downloads',
+	'updates':                '/updates',
+	'subscriptions':          '/subscriptions',
 	'subscription-analytics': '/subscriptions/analytics',
 	// 'subscription-detail' has no single canonical path — its real route is
 	// `${PAGE_PATHS.subscriptions}/:id` (see SUBSCRIPTION_DETAIL_PATH below).
@@ -22,7 +26,7 @@ export function subscriptionDetailPath( id: string ): string {
 // Reverse lookup: route path -> Page id. Used by components (Sidebar, TopBar)
 // that only know about the Page type and have no awareness of routing.
 export const PATH_TO_PAGE: Record< string, Page > = Object.fromEntries(
-	Object.entries( PAGE_PATHS ).map( ( [ page, path ] ) => [ path, page ] )
+	Object.entries( PAGE_PATHS ).map( ( [ page, path ] ) => [ path, page as Page ] )
 ) as Record< string, Page >;
 
 /**

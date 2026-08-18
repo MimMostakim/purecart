@@ -15,7 +15,9 @@ use PureCart\Commerce\OrderHandler;
 use PureCart\Commerce\ProductTypes;
 use PureCart\API\RestApi;
 use PureCart\CustomerDashboard\Dashboard;
+use PureCart\Downloads\AccountDownloadsMerger;
 use PureCart\Admin\Admin;
+use PureCart\Subscriptions\Module as SubscriptionsModule;
 
 /**
  * Plugin singleton.
@@ -46,10 +48,19 @@ final class Plugin {
 
 	/** Boot all modules. */
 	private function init(): void {
+		// Run a lightweight schema upgrade check on every request.
+		// The version comparison is a cached get_option() — essentially free.
+		// dbDelta() only fires on version mismatch (post-update, first boot).
+		// Belongs here rather than Admin so REST, CLI, and front-end requests
+		// also receive the upgraded schema, not only WP admin page loads.
+		Activator::maybe_upgrade();
+
 		new ProductTypes();
 		new OrderHandler();
 		new RestApi();
 		new Dashboard();
+		new AccountDownloadsMerger();
+		new SubscriptionsModule();
 
 		if ( is_admin() ) {
 			new Admin();

@@ -6,12 +6,14 @@ import App from './App';
 // @ts-ignore: side-effect import of CSS without type declarations
 import './styles/index.css';
 
-createRoot(
-	document.getElementById( 'purecart-react-dashboard-root' )!
-).render(
-	<Provider store={ store }>
-		<AppRouter>
-			<App />
-		</AppRouter>
-	</Provider>
-);
+const rootEl = document.getElementById( 'purecart-root' );
+
+if ( rootEl ) {
+	createRoot( rootEl ).render(
+		<Provider store={ store }>
+			<AppRouter>
+				<App />
+			</AppRouter>
+		</Provider>
+	);
+}

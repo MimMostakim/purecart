@@ -12,11 +12,17 @@ namespace PureCart\CustomerDashboard;
 defined( 'ABSPATH' ) || exit;
 
 use PureCart\Licensing\LicenseGenerator;
-use PureCart\Downloads\TokenManager;
 use PureCart\SaaS\AccountProvisioner;
 
 /**
  * Registers and renders My Account dashboard tabs.
+ *
+ * Deliberately does NOT register a "Downloads" tab of its own — WooCommerce
+ * already has a native one, and PureCart's own downloads are merged into
+ * that same native tab instead (see {@see \PureCart\Downloads\AccountDownloadsMerger}).
+ * Running a second, separate "Downloads" tab here used to mean an account
+ * with any regular WooCommerce downloadable-product purchase saw two tabs
+ * both labeled "Downloads" at once.
  */
 class Dashboard {
 
@@ -25,7 +31,7 @@ class Dashboard {
 	 *
 	 * @var string[]
 	 */
-	private array $slugs = array( 'purecart-licenses', 'purecart-downloads', 'purecart-api-keys' );
+	private array $slugs = array( 'purecart-licenses', 'purecart-api-keys' );
 
 	/**
 	 * Register My Account menu, query var, and endpoint hooks.
@@ -51,9 +57,8 @@ class Dashboard {
 	 */
 	private function get_tabs(): array {
 		return array(
-			'purecart-licenses'  => __( 'My Licenses', 'purecart' ),
-			'purecart-downloads' => __( 'Downloads', 'purecart' ),
-			'purecart-api-keys'  => __( 'API Keys', 'purecart' ),
+			'purecart-licenses' => __( 'My Licenses', 'purecart' ),
+			'purecart-api-keys' => __( 'API Keys', 'purecart' ),
 		);
 	}
 
@@ -144,9 +149,6 @@ class Dashboard {
 			case 'purecart-licenses':
 				$this->render_licenses_tab();
 				break;
-			case 'purecart-downloads':
-				$this->render_downloads_tab();
-				break;
 			case 'purecart-api-keys':
 				$this->render_api_keys_tab();
 				break;
@@ -192,49 +194,6 @@ class Dashboard {
 				esc_html( (string) $license->activated_count ),
 				'unlimited' === $license->plan_type ? esc_html__( '∞', 'purecart' ) : esc_html( (string) $license->activation_limit ),
 				esc_html( $expires_label )
-			);
-		}
-
-		echo '</tbody></table>';
-	}
-
-	/**
-	 * Render the Downloads tab content.
-	 *
-	 * @since 1.0.0
-	 * @return void
-	 */
-	private function render_downloads_tab(): void {
-		$user_id   = get_current_user_id();
-		$downloads = ( new TokenManager() )->get_by_user( $user_id );
-
-		if ( empty( $downloads ) ) {
-			echo '<p>' . esc_html__( 'No downloads available.', 'purecart' ) . '</p>';
-			return;
-		}
-
-		echo '<table class="woocommerce-table shop_table purecart-downloads-table">';
-		echo '<thead><tr>'
-			. '<th>' . esc_html__( 'Product', 'purecart' ) . '</th>'
-			. '<th>' . esc_html__( 'Downloads', 'purecart' ) . '</th>'
-			. '<th>' . esc_html__( 'Expires', 'purecart' ) . '</th>'
-			. '<th>' . esc_html__( 'Action', 'purecart' ) . '</th>'
-			. '</tr></thead><tbody>';
-
-		foreach ( $downloads as $dl ) {
-			$remaining = max( 0, (int) $dl->max_downloads - (int) $dl->download_count );
-			$expired   = strtotime( $dl->expires_at ) < time();
-			$url       = home_url( 'purecart/' . $dl->token );
-
-			printf(
-				'<tr><td>%s</td><td>%d / %d</td><td>%s</td><td>%s</td></tr>',
-				esc_html( $dl->product_name ?? '' ),
-				(int) $dl->download_count,
-				(int) $dl->max_downloads,
-				esc_html( date_i18n( get_option( 'date_format' ), strtotime( $dl->expires_at ) ) ),
-				( $expired || $remaining <= 0 )
-					? '<span class="purecart-expired">' . esc_html__( 'Expired', 'purecart' ) . '</span>'
-					: '<a href="' . esc_url( $url ) . '" class="button">' . esc_html__( 'Download', 'purecart' ) . '</a>'
 			);
 		}
 

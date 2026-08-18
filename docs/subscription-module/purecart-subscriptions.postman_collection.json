@@ -1,0 +1,419 @@
+{
+	"info": {
+		"name": "PureCart Subscriptions API",
+		"description": "PureCart Subscriptions ব্যাকএন্ড QA-র জন্য। Import করার পর Variables ট্যাবে base_url, admin_user, admin_pass, customer_b_user, customer_b_pass সেট করুন (Application Password ব্যবহার করুন, লগইন পাসওয়ার্ড নয়)।",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "basic",
+		"basic": [
+			{ "key": "username", "value": "{{admin_user}}", "type": "string" },
+			{ "key": "password", "value": "{{admin_pass}}", "type": "string" }
+		]
+	},
+	"variable": [
+		{ "key": "base_url", "value": "http://127.0.0.1:10004", "description": "Local-এর nginx সরাসরি এই পোর্টে শোনে। woodigital.local ব্যবহার করবেন না — ওটা hosts ফাইলে নেই, Postman resolve করতে পারে না (ENOTFOUND)। পোর্ট বদলে গেলে Local → সাইট → Overview-তে দেখুন।" },
+		{ "key": "admin_user", "value": "", "description": "অ্যাডমিন ইউজারনেম" },
+		{ "key": "admin_pass", "value": "", "description": "Users → Profile → Application Passwords থেকে বানানো" },
+		{ "key": "customer_b_user", "value": "", "description": "Bob-এর ইউজারনেম (isolation টেস্টের জন্য)" },
+		{ "key": "customer_b_pass", "value": "", "description": "Bob-এর Application Password" },
+		{ "key": "sub_id", "value": "1", "description": "Alice-এর subscription ID" },
+		{ "key": "sub_id_b", "value": "2", "description": "Bob-এর subscription ID" },
+		{ "key": "upgrade_product_id", "value": "0", "description": "P2 – Pro প্রোডাক্টের ID" }
+	],
+	"item": [
+		{
+			"name": "1. পড়া (Read)",
+			"item": [
+				{
+					"name": "সব subscription (admin)",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/wp-json/purecart/v1/subscriptions",
+							"host": [ "{{base_url}}" ],
+							"path": [ "wp-json", "purecart", "v1", "subscriptions" ],
+							"query": [ { "key": "status", "value": "active", "disabled": true } ]
+						},
+						"description": "status প্যারাম না দিলে সব status আসবে (Step 15-এ ঠিক করা হয়েছে — আগে শুধু active আসত)।"
+					},
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('200 আসছে', () => pm.response.to.have.status(200));",
+						"pm.test('array ফেরত দিচ্ছে', () => pm.expect(pm.response.json()).to.be.an('array'));",
+						"const rows = pm.response.json();",
+						"if (rows.length) { pm.collectionVariables.set('sub_id', rows[0].id); console.log('sub_id সেট হলো:', rows[0].id); }"
+					], "type": "text/javascript" } } ]
+				},
+				{
+					"name": "একটা subscription",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id}}"
+					},
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('200 আসছে', () => pm.response.to.have.status(200));",
+						"const s = pm.response.json();",
+						"pm.test('জরুরি ফিল্ডগুলো আছে', () => {",
+						"  ['id','status','recurring_amount','billing_period','next_payment_at'].forEach(k => pm.expect(s).to.have.property(k));",
+						"});",
+						"console.log('status:', s.status, '| পরের বিল:', s.next_payment_at);"
+					], "type": "text/javascript" } } ]
+				},
+				{
+					"name": "ইভেন্ট লগ (admin)",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id}}/logs"
+					},
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('200 আসছে', () => pm.response.to.have.status(200));",
+						"console.log('লগ সংখ্যা:', pm.response.json().length);"
+					], "type": "text/javascript" } } ]
+				}
+			]
+		},
+		{
+			"name": "2. Customer action",
+			"item": [
+				{
+					"name": "Pause",
+					"request": {
+						"method": "POST",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"body": { "mode": "raw", "raw": "{\n  \"resume_at\": null\n}" },
+						"url": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id}}/pause",
+						"description": "resume_at দিলে ওই তারিখে অটো resume হবে; null দিলে ম্যানুয়াল resume।"
+					},
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('200 আসছে', () => pm.response.to.have.status(200));",
+						"pm.test('status এখন paused', () => pm.expect(pm.response.json().subscription.status).to.eql('paused'));"
+					], "type": "text/javascript" } } ]
+				},
+				{
+					"name": "Resume",
+					"request": {
+						"method": "POST",
+						"url": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id}}/resume",
+						"description": "যত দিন pause ছিল, next_payment_at ঠিক তত দিন পিছিয়ে যাবে।"
+					},
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('200 আসছে', () => pm.response.to.have.status(200));",
+						"pm.test('status এখন active', () => pm.expect(pm.response.json().subscription.status).to.eql('active'));"
+					], "type": "text/javascript" } } ]
+				},
+				{
+					"name": "Skip (পরের cycle বাদ)",
+					"request": {
+						"method": "POST",
+						"url": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id}}/skip",
+						"description": "next_payment_at এক interval এগোবে, কোনো চার্জ হবে না। ডিফল্ট limit ১ — দ্বিতীয়বার ব্যর্থ হবে।"
+					}
+				},
+				{
+					"name": "Cancel (period শেষে)",
+					"request": {
+						"method": "POST",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"body": { "mode": "raw", "raw": "{\n  \"immediately\": false,\n  \"reason\": \"too_expensive\"\n}" },
+						"url": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id}}/cancel",
+						"description": "immediately=false → pending_cancel, কেনা period শেষ হলে অটো cancel।"
+					},
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('200 আসছে', () => pm.response.to.have.status(200));",
+						"pm.test('status = pending_cancel', () => pm.expect(pm.response.json().subscription.status).to.eql('pending_cancel'));"
+					], "type": "text/javascript" } } ]
+				},
+				{
+					"name": "Cancel (সাথে সাথে)",
+					"request": {
+						"method": "POST",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"body": { "mode": "raw", "raw": "{\n  \"immediately\": true,\n  \"reason\": \"not_using\"\n}" },
+						"url": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id}}/cancel"
+					}
+				},
+				{
+					"name": "Resubscribe",
+					"request": {
+						"method": "POST",
+						"url": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id}}/resubscribe",
+						"description": "৩০ দিনের মধ্যে হলে একই row ফিরে আসে; পরে হলে নতুন row + previous_subscription_id লিংক।"
+					}
+				},
+				{
+					"name": "Early renewal (আগেই নবায়ন)",
+					"request": {
+						"method": "POST",
+						"url": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id}}/early-renewal",
+						"description": "⚠️ gateway ছাড়া ফেল করবে — recurring_amount = 0 করে নিলে চলবে।"
+					}
+				},
+				{
+					"name": "Plan বদল (upgrade/downgrade)",
+					"request": {
+						"method": "POST",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"body": { "mode": "raw", "raw": "{\n  \"product_id\": {{upgrade_product_id}},\n  \"mode\": \"apply_at_renewal\"\n}" },
+						"url": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id}}/upgrade",
+						"description": "mode: prorate_immediately | apply_at_renewal (ডিফল্ট) | no_proration"
+					}
+				}
+			]
+		},
+		{
+			"name": "3. Retention flow",
+			"description": "⚠️ offers ও accept-offer শুধু owner পারে — admin দিয়েও 403 আসবে (ইচ্ছাকৃত: অফার নেওয়া customer-এর নিজের সিদ্ধান্ত)। তাই এই ফোল্ডার Bob-এর auth ও Bob-এর subscription ({{sub_id_b}}) ব্যবহার করে।",
+			"auth": {
+				"type": "basic",
+				"basic": [
+					{ "key": "username", "value": "{{customer_b_user}}", "type": "string" },
+					{ "key": "password", "value": "{{customer_b_pass}}", "type": "string" }
+				]
+			},
+			"item": [
+				{
+					"name": "ধাপ ১ — কারণের তালিকা",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id_b}}/cancellation/reasons"
+					},
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('200 আসছে', () => pm.response.to.have.status(200));",
+						"pm.test('৬টা কারণ আছে', () => pm.expect(Object.keys(pm.response.json()).length).to.be.at.least(6));"
+					], "type": "text/javascript" } } ]
+				},
+				{
+					"name": "ধাপ ২ — যোগ্য অফার",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id_b}}/cancellation/offers?reason=too_expensive",
+							"host": [ "{{base_url}}" ],
+							"path": [ "wp-json", "purecart", "v1", "subscriptions", "{{sub_id_b}}", "cancellation", "offers" ],
+							"query": [ { "key": "reason", "value": "too_expensive" } ]
+						},
+						"description": "reason বদলে দেখুন — কারণভেদে আলাদা অফার আসে (not_using → pause, pausing → pause, ইত্যাদি)।"
+					},
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('200 আসছে', () => pm.response.to.have.status(200));",
+						"const offers = pm.response.json();",
+						"pm.test('অন্তত একটা অফার আছে', () => pm.expect(Object.keys(offers).length).to.be.at.least(1));",
+						"console.log('যোগ্য অফার:', Object.keys(offers).join(', '));"
+					], "type": "text/javascript" } } ]
+				},
+				{
+					"name": "ধাপ ৩ — অফার গ্রহণ",
+					"request": {
+						"method": "POST",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"body": { "mode": "raw", "raw": "{\n  \"offer_type\": \"discount\",\n  \"reason\": \"too_expensive\"\n}" },
+						"url": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id_b}}/cancellation/accept-offer",
+						"description": "offer_type: discount | pause | skip | downgrade | contact. গ্রহণ করলে cancel বাতিল হয়ে subscription active থাকবে।"
+					}
+				}
+			]
+		},
+		{
+			"name": "4. Admin-only action",
+			"item": [
+				{
+					"name": "জোর করে renew",
+					"request": { "method": "POST", "url": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id}}/renew" }
+				},
+				{
+					"name": "পেমেন্ট retry",
+					"request": { "method": "POST", "url": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id}}/retry-payment" }
+				},
+				{
+					"name": "কার্ড আপডেট লিংক পাঠানো",
+					"request": { "method": "POST", "url": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id}}/send-card-update" }
+				}
+			]
+		},
+		{
+			"name": "5. রিপোর্ট",
+			"item": [
+				{
+					"name": "Summary (MRR/ARR/churn)",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/wp-json/purecart/v1/reports/subscriptions/summary",
+							"host": [ "{{base_url}}" ],
+							"path": [ "wp-json", "purecart", "v1", "reports", "subscriptions", "summary" ],
+							"query": [
+								{ "key": "period_start", "value": "2026-08-01 00:00:00", "disabled": true },
+								{ "key": "period_end", "value": "2026-08-31 23:59:59", "disabled": true }
+							]
+						}
+					},
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('200 আসছে', () => pm.response.to.have.status(200));",
+						"const r = pm.response.json();",
+						"pm.test('সব মেট্রিক আছে', () => {",
+						"  ['mrr','arr','arpu','ltv','user_churn_rate','revenue_churn_rate','trial_conversion_rate','churn_bands'].forEach(k => pm.expect(r).to.have.property(k));",
+						"});",
+						"pm.test('ARR = MRR x 12', () => pm.expect(Number(r.arr)).to.be.closeTo(Number(r.mrr) * 12, 0.02));",
+						"console.log('MRR:', r.mrr, '| সাবস্ক্রাইবার:', r.subscriber_count, '| ARPU:', r.arpu);",
+						"console.log('হাতে মিলিয়ে দেখুন: শুধু active গোনা হয়, trialing/past_due বাদ');"
+					], "type": "text/javascript" } } ]
+				},
+				{
+					"name": "Export — JSON",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/wp-json/purecart/v1/reports/subscriptions/export?format=json",
+							"host": [ "{{base_url}}" ],
+							"path": [ "wp-json", "purecart", "v1", "reports", "subscriptions", "export" ],
+							"query": [
+								{ "key": "format", "value": "json" },
+								{ "key": "status", "value": "active", "disabled": true }
+							]
+						}
+					},
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('200 আসছে', () => pm.response.to.have.status(200));",
+						"const rows = pm.response.json();",
+						"pm.test('প্রথম row হলো header', () => pm.expect(rows[0]).to.include('id').and.to.include('user_email'));",
+						"console.log('কলাম সংখ্যা:', rows[0].length, '| row সংখ্যা:', rows.length - 1);"
+					], "type": "text/javascript" } } ]
+				},
+				{
+					"name": "Export — CSV",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/wp-json/purecart/v1/reports/subscriptions/export",
+						"description": "raw CSV ফেরত দেবে (JSON-এ মোড়ানো নয়)। Postman-এ Body → Raw দেখুন।"
+					},
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('200 আসছে', () => pm.response.to.have.status(200));",
+						"const body = pm.response.text();",
+						"pm.test('আসল CSV, JSON string নয়', () => {",
+						"  pm.expect(body).to.include('id,user_id,user_email');",
+						"  pm.expect(body.trim().charAt(0)).to.not.eql('\"');",
+						"});",
+						"pm.test('UTF-8 BOM আছে (Excel-এর জন্য)', () => pm.expect(body.charCodeAt(0)).to.eql(0xFEFF));"
+					], "type": "text/javascript" } } ]
+				}
+			]
+		},
+		{
+			"name": "6. 🔒 নিরাপত্তা টেস্ট",
+			"description": "এই ফোল্ডারের সব রিকোয়েস্ট Bob-এর auth ব্যবহার করে (collection-এর admin auth নয়)। সবগুলোতেই ব্যর্থ হওয়ার কথা — পাস মানে নিরাপত্তা ঠিক আছে।",
+			"auth": {
+				"type": "basic",
+				"basic": [
+					{ "key": "username", "value": "{{customer_b_user}}", "type": "string" },
+					{ "key": "password", "value": "{{customer_b_pass}}", "type": "string" }
+				]
+			},
+			"item": [
+				{
+					"name": "❌ Bob → Alice-এর subscription পড়া",
+					"request": { "method": "GET", "url": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id}}" },
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('403 — অন্যের subscription পড়া যায় না', () => pm.response.to.have.status(403));"
+					], "type": "text/javascript" } } ]
+				},
+				{
+					"name": "❌ Bob → Alice-এর subscription cancel",
+					"request": {
+						"method": "POST",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"body": { "mode": "raw", "raw": "{\n  \"immediately\": true\n}" },
+						"url": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id}}/cancel"
+					},
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('403 — অন্যের subscription cancel করা যায় না', () => pm.response.to.have.status(403));"
+					], "type": "text/javascript" } } ]
+				},
+				{
+					"name": "❌ Bob → admin list",
+					"request": { "method": "GET", "url": "{{base_url}}/wp-json/purecart/v1/subscriptions" },
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('403 — সাধারণ customer admin list দেখতে পারে না', () => pm.response.to.have.status(403));"
+					], "type": "text/javascript" } } ]
+				},
+				{
+					"name": "❌ Bob → রিপোর্ট",
+					"request": { "method": "GET", "url": "{{base_url}}/wp-json/purecart/v1/reports/subscriptions/summary" },
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('403 — সাধারণ customer রিপোর্ট দেখতে পারে না', () => pm.response.to.have.status(403));"
+					], "type": "text/javascript" } } ]
+				},
+				{
+					"name": "❌ Bob → CSV export",
+					"request": { "method": "GET", "url": "{{base_url}}/wp-json/purecart/v1/reports/subscriptions/export" },
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('403 — সাধারণ customer পুরো customer list নামাতে পারে না', () => pm.response.to.have.status(403));"
+					], "type": "text/javascript" } } ]
+				},
+				{
+					"name": "❌ Bob → Alice-এর retention offer",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id}}/cancellation/offers?reason=too_expensive",
+							"host": [ "{{base_url}}" ],
+							"path": [ "wp-json", "purecart", "v1", "subscriptions", "{{sub_id}}", "cancellation", "offers" ],
+							"query": [ { "key": "reason", "value": "too_expensive" } ]
+						}
+					},
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('403 — অন্যের অফার দেখা যায় না', () => pm.response.to.have.status(403));"
+					], "type": "text/javascript" } } ]
+				},
+				{
+					"name": "✅ Bob → নিজের subscription (এটা কাজ করার কথা)",
+					"request": { "method": "GET", "url": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id_b}}" },
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('200 — নিজেরটা পড়তে পারে', () => pm.response.to.have.status(200));"
+					], "type": "text/javascript" } } ]
+				},
+				{
+					"name": "❓ না-থাকা ID (404 হবে, 403 নয়)",
+					"request": { "method": "GET", "url": "{{base_url}}/wp-json/purecart/v1/subscriptions/99999999" },
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('404 আসে — 403 দিলে ID আছে কিনা ফাঁস হতো', () => pm.response.to.have.status(404));"
+					], "type": "text/javascript" } } ]
+				},
+				{
+					"name": "❌ auth ছাড়া",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"url": "{{base_url}}/wp-json/purecart/v1/subscriptions/{{sub_id}}"
+					},
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('401 — লগইন ছাড়া ঢোকা যায় না', () => pm.response.to.have.status(401));"
+					], "type": "text/javascript" } } ]
+				},
+				{
+					"name": "❌ SQL injection চেষ্টা",
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{ "key": "username", "value": "{{admin_user}}", "type": "string" },
+								{ "key": "password", "value": "{{admin_pass}}", "type": "string" }
+							]
+						},
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/wp-json/purecart/v1/subscriptions?status=active' OR '1'='1",
+							"host": [ "{{base_url}}" ],
+							"path": [ "wp-json", "purecart", "v1", "subscriptions" ],
+							"query": [ { "key": "status", "value": "active' OR '1'='1" } ]
+						}
+					},
+					"event": [ { "listen": "test", "script": { "exec": [
+						"pm.test('সার্ভার ক্র্যাশ করেনি', () => pm.response.to.have.status(200));",
+						"pm.test('injection কাজ করেনি — খালি array', () => pm.expect(pm.response.json()).to.be.an('array').that.is.empty);",
+						"console.log('এরপর phpMyAdmin-এ দেখুন টেবিল ঠিক আছে কিনা');"
+					], "type": "text/javascript" } } ]
+				}
+			]
+		}
+	]
+}

@@ -29,6 +29,7 @@ export const M3 = {
 	outline: '#79747E',
 	outlineVariant: '#CAC4D0',
 	error: '#B3261E',
+	errorContainer: '#F9DEDC',
 	success: '#386A20',
 	successContainer: '#C2E7A0',
 	warning: '#7A5900',
@@ -45,6 +46,8 @@ export const NAV_SCHEMA: Array< {
 	id: Page;
 	icon: React.ElementType;
 	label: string;
+	/** Render a horizontal rule after this item. */
+	dividerAfter?: boolean;
 } > = [
 	{
 		id: 'subscriptions',
@@ -65,8 +68,13 @@ export const NAV_SCHEMA: Array< {
 // 'subscription-detail' is deliberately absent — it's a drill-down destination
 // (reached by clicking a subscription's ID), not a top-level nav item.
 
+// ─── Page titles ───────────────────────────────────────────────────────────────
 export const PAGE_TITLES: Record< Page, string > = {
-	subscriptions: 'Subscriptions',
+	'overview':               'Overview',
+	'licenses':               'Licenses',
+	'downloads':              'Downloads',
+	'updates':                'Updates',
+	'subscriptions':          'Subscriptions',
 	'subscription-analytics': 'Subscription Analytics',
 	'subscription-detail': 'Subscription Detail',
 	settings: 'Settings',
@@ -430,15 +438,17 @@ export const subTrendData = [
 	{ month: 'May', active: 5100, new: 610, churned: 230, paused: 290 },
 	{ month: 'Jun', active: 5241, new: 580, churned: 215, paused: 412 },
 ];
+
 export const subPlanMix = [
-	{ name: 'Annual', value: 58, color: M3.primary },
-	{ name: 'Monthly', value: 31, color: M3.secondary },
+	{ name: 'Annual',   value: 58, color: M3.primary },
+	{ name: 'Monthly',  value: 31, color: M3.secondary },
 	{ name: 'Lifetime', value: 11, color: M3.info },
 ];
+
 export const subRevenueByProduct = [
-	{ product: 'Plugin Pro', revenue: 24800 },
+	{ product: 'Plugin Pro',   revenue: 24800 },
 	{ product: 'Theme Bundle', revenue: 11200 },
-	{ product: 'SaaS Pro', revenue: 6400 },
+	{ product: 'SaaS Pro',     revenue: 6400 },
 	{ product: 'SaaS Starter', revenue: 2200 },
 ];
 
