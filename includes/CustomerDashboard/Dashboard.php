@@ -48,6 +48,33 @@ class Dashboard {
 		}
 
 		add_action( 'init', array( $this, 'endpoints' ) );
+		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+	}
+
+	/**
+	 * Enqueue the reveal/copy/manual-activation script on the My Licenses tab.
+	 *
+	 * Reuses the same admin.css/admin.js already shipped for the product
+	 * meta box (click-to-copy, blur toggle) rather than shipping a second
+	 * near-identical asset pair for the front end.
+	 *
+	 * @since 1.0.0
+	 * @return void
+	 */
+	public function enqueue_assets(): void {
+		if ( ! function_exists( 'is_wc_endpoint_url' ) || ! is_wc_endpoint_url( 'purecart-licenses' ) ) {
+			return;
+		}
+
+		wp_enqueue_style( 'purecart-admin', PURECART_URL . 'assets/css/admin.css', array(), PURECART_VERSION );
+		wp_enqueue_script( 'purecart-admin', PURECART_URL . 'assets/js/admin.js', array( 'jquery' ), PURECART_VERSION, true );
+		wp_localize_script(
+			'purecart-admin',
+			'purecartAdmin',
+			array(
+				'apiUrl' => esc_url_raw( rest_url( PURECART_API_NAMESPACE . '/' ) ),
+			)
+		);
 	}
 
 	/**
@@ -177,6 +204,7 @@ class Dashboard {
 			. '<th>' . esc_html__( 'Status', 'purecart' ) . '</th>'
 			. '<th>' . esc_html__( 'Sites Used', 'purecart' ) . '</th>'
 			. '<th>' . esc_html__( 'Expires', 'purecart' ) . '</th>'
+			. '<th>' . esc_html__( 'Activate on Domain', 'purecart' ) . '</th>'
 			. '</tr></thead><tbody>';
 
 		foreach ( $licenses as $license ) {
@@ -185,16 +213,50 @@ class Dashboard {
 				? date_i18n( get_option( 'date_format' ), strtotime( $license->expires_at ) )
 				: __( 'Lifetime', 'purecart' );
 
+			echo '<tr>';
+			printf( '<td>%s</td>', esc_html( $license->product_name ?? '' ) );
+
+			// Blurred by default — click "Reveal" to show, then "Copy" to
+			// copy. Prevents shoulder-surfing the raw key on-page-load.
 			printf(
-				'<tr><td>%s</td><td><code>%s</code></td><td><span class="purecart-status purecart-status--%s">%s</span></td><td>%s / %s</td><td>%s</td></tr>',
-				esc_html( $license->product_name ?? '' ),
-				esc_html( $license->license_key ),
-				esc_attr( $license->status ),
-				esc_html( ucfirst( $license->status ) ),
-				esc_html( (string) $license->activated_count ),
-				'unlimited' === $license->plan_type ? esc_html__( '∞', 'purecart' ) : esc_html( (string) $license->activation_limit ),
-				esc_html( $expires_label )
+				'<td><code class="purecart-license-key purecart-license-key--hidden" data-key="%1$s">••••-••••-••••-••••</code> '
+					. '<button type="button" class="purecart-reveal-key button-link">%2$s</button>'
+					. '<button type="button" class="purecart-copy-key button-link" style="display:none">%3$s</button></td>',
+				esc_attr( $license->license_key ),
+				esc_html__( 'Reveal', 'purecart' ),
+				esc_html__( 'Copy', 'purecart' )
 			);
+
+			printf(
+				'<td><span class="purecart-status purecart-status--%s">%s</span></td>',
+				esc_attr( $license->status ),
+				esc_html( ucfirst( $license->status ) )
+			);
+
+			printf(
+				'<td>%s / %s</td>',
+				esc_html( (string) $license->activated_count ),
+				'unlimited' === $license->plan_type ? esc_html__( '∞', 'purecart' ) : esc_html( (string) $license->activation_limit )
+			);
+
+			printf( '<td>%s</td>', esc_html( $expires_label ) );
+
+			if ( 'active' === $license->status ) {
+				printf(
+					'<td><form class="purecart-activate-license" data-license-key="%1$s">'
+						. '<input type="text" name="domain" placeholder="%2$s" required>'
+						. '<button type="submit" class="button">%3$s</button>'
+						. '<span class="purecart-activate-result"></span>'
+						. '</form></td>',
+					esc_attr( $license->license_key ),
+					esc_attr__( 'example.com', 'purecart' ),
+					esc_html__( 'Activate', 'purecart' )
+				);
+			} else {
+				echo '<td>&mdash;</td>';
+			}
+
+			echo '</tr>';
 		}
 
 		echo '</tbody></table>';

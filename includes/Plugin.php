@@ -18,6 +18,8 @@ use PureCart\CustomerDashboard\Dashboard;
 use PureCart\Downloads\AccountDownloadsMerger;
 use PureCart\Admin\Admin;
 use PureCart\Subscriptions\Module as SubscriptionsModule;
+use PureCart\CLI\LicenseCommands;
+use PureCart\Licensing\JwtHooks;
 
 /**
  * Plugin singleton.
@@ -61,9 +63,14 @@ final class Plugin {
 		new Dashboard();
 		new AccountDownloadsMerger();
 		new SubscriptionsModule();
+		new JwtHooks();
 
 		if ( is_admin() ) {
 			new Admin();
+		}
+
+		if ( defined( 'WP_CLI' ) && WP_CLI ) {
+			\WP_CLI::add_command( 'purecart license', LicenseCommands::class );
 		}
 
 		do_action( 'purecart_loaded', $this );

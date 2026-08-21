@@ -275,12 +275,13 @@ class Admin {
 	public function render_product_meta_box( \WP_Post $post ): void {
 		wp_nonce_field( 'purecart_save_product_meta', 'purecart_product_nonce' );
 
-		$product      = wc_get_product( $post->ID );
-		$license_type = $product ? $product->get_meta( '_purecart_license_type' ) : 'single';
-		$act_limit    = $product ? $product->get_meta( '_purecart_activation_limit' ) : 1;
-		$duration     = $product ? $product->get_meta( '_purecart_license_duration_days' ) : 365;
-		$plugin_slug  = $product ? $product->get_meta( '_purecart_plugin_slug' ) : '';
-		$saas_plan    = $product ? $product->get_meta( '_purecart_saas_plan' ) : 'starter';
+		$product          = wc_get_product( $post->ID );
+		$license_type     = $product ? $product->get_meta( '_purecart_license_type' ) : 'single';
+		$act_limit        = $product ? $product->get_meta( '_purecart_activation_limit' ) : 1;
+		$duration         = $product ? $product->get_meta( '_purecart_license_duration_days' ) : 365;
+		$renewal_behavior = $product ? ( $product->get_meta( '_purecart_renewal_behavior' ) ?: 'extend' ) : 'extend';
+		$plugin_slug      = $product ? $product->get_meta( '_purecart_plugin_slug' ) : '';
+		$saas_plan        = $product ? $product->get_meta( '_purecart_saas_plan' ) : 'starter';
 
 		?>
 		<table class="form-table purecart-meta-table">
@@ -319,6 +320,26 @@ class Admin {
 					<input type="number" id="purecart_license_duration_days" name="purecart_license_duration_days"
 						value="<?php echo esc_attr( $duration ); ?>" min="1" class="small-text">
 					<p class="description"><?php esc_html_e( 'Set 365 for 1 year. Ignored for "Lifetime" type.', 'purecart' ); ?></p>
+				</td>
+			</tr>
+			<tr>
+				<th><label for="purecart_renewal_behavior"><?php esc_html_e( 'Renewal Behavior', 'purecart' ); ?></label></th>
+				<td>
+					<select id="purecart_renewal_behavior" name="purecart_renewal_behavior">
+						<?php
+						foreach (
+							array(
+								'extend'  => __( 'Extend existing key', 'purecart' ),
+								'new_key' => __( 'Issue a new key', 'purecart' ),
+							) as $val => $label
+						) :
+							?>
+							<option value="<?php echo esc_attr( $val ); ?>" <?php selected( $renewal_behavior, $val ); ?>>
+								<?php echo esc_html( $label ); ?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+					<p class="description"><?php esc_html_e( 'What happens to the license on subscription renewal. "Issue a new key" revokes the old key and generates a fresh one — useful for metered/seat-limited models.', 'purecart' ); ?></p>
 				</td>
 			</tr>
 			<tr>
@@ -362,6 +383,7 @@ class Admin {
 			'_purecart_license_type'          => 'purecart_license_type',
 			'_purecart_activation_limit'      => 'purecart_activation_limit',
 			'_purecart_license_duration_days' => 'purecart_license_duration_days',
+			'_purecart_renewal_behavior'      => 'purecart_renewal_behavior',
 			'_purecart_plugin_slug'           => 'purecart_plugin_slug',
 			'_purecart_saas_plan'             => 'purecart_saas_plan',
 		);
