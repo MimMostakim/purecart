@@ -33,13 +33,22 @@
 							"raw": "{{base_url}}/wp-json/purecart/v1/subscriptions",
 							"host": [ "{{base_url}}" ],
 							"path": [ "wp-json", "purecart", "v1", "subscriptions" ],
-							"query": [ { "key": "status", "value": "active", "disabled": true } ]
+							"query": [
+								{ "key": "status", "value": "active", "disabled": true },
+								{ "key": "page", "value": "1", "disabled": true },
+								{ "key": "per_page", "value": "20", "disabled": true },
+								{ "key": "search", "value": "", "disabled": true }
+							]
 						},
-						"description": "status প্যারাম না দিলে সব status আসবে (Step 15-এ ঠিক করা হয়েছে — আগে শুধু active আসত)।"
+						"description": "status প্যারাম না দিলে সব status আসবে। page, per_page, search ফিল্টার ও pagination সাপোর্ট করে।"
 					},
 					"event": [ { "listen": "test", "script": { "exec": [
 						"pm.test('200 আসছে', () => pm.response.to.have.status(200));",
 						"pm.test('array ফেরত দিচ্ছে', () => pm.expect(pm.response.json()).to.be.an('array'));",
+						"pm.test('Pagination headers উপস্থিত', () => {",
+						"  pm.expect(pm.response.headers.has('X-WP-Total')).to.be.true;",
+						"  pm.expect(pm.response.headers.has('X-WP-TotalPages')).to.be.true;",
+						"});",
 						"const rows = pm.response.json();",
 						"if (rows.length) { pm.collectionVariables.set('sub_id', rows[0].id); console.log('sub_id সেট হলো:', rows[0].id); }"
 					], "type": "text/javascript" } } ]

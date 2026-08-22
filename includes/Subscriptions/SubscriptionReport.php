@@ -391,8 +391,9 @@ class SubscriptionReport {
 	public function export_rows( ?string $status = null ): array {
 		$columns = $this->csv_columns();
 		$rows    = array( $columns );
+		$result  = $this->subscriptions->find_all( status: $status, per_page: -1 );
 
-		foreach ( $this->subscriptions->find_all( $status ) as $subscription ) {
+		foreach ( $result['items'] as $subscription ) {
 			$resolved = $this->export_row( $subscription );
 
 			$row = array();

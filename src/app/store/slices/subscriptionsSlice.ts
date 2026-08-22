@@ -47,6 +47,8 @@ interface SubscriptionsState {
 	error: string | null;
 	selectedId: string | null;
 	filters: SubscriptionFilters;
+	page: number;
+	perPage: number;
 }
 
 const initialState: SubscriptionsState = {
@@ -55,6 +57,8 @@ const initialState: SubscriptionsState = {
 	error: null,
 	selectedId: null,
 	filters: DEFAULT_SUBSCRIPTION_FILTERS,
+	page: 1,
+	perPage: 10,
 };
 
 /**
@@ -91,29 +95,44 @@ const subscriptionsSlice = createSlice( {
 		removeSubscription( state, action: PayloadAction< string > ) {
 			state.items = state.items.filter( ( r ) => r.id !== action.payload );
 		},
+		setPage( state, action: PayloadAction< number > ) {
+			state.page = Math.max( 1, action.payload );
+		},
+		setPerPage( state, action: PayloadAction< number > ) {
+			state.perPage = action.payload;
+			state.page = 1;
+		},
 		setSearch( state, action: PayloadAction< string > ) {
 			state.filters.search = action.payload;
+			state.page = 1;
 		},
 		setStatusFilter( state, action: PayloadAction< string > ) {
 			state.filters.status = action.payload;
+			state.page = 1;
 		},
 		setProductFilter( state, action: PayloadAction< string > ) {
 			state.filters.product = action.payload;
+			state.page = 1;
 		},
 		setCycleFilter( state, action: PayloadAction< string > ) {
 			state.filters.cycle = action.payload;
+			state.page = 1;
 		},
 		setDeliveryTypeFilter( state, action: PayloadAction< string > ) {
 			state.filters.deliveryType = action.payload;
+			state.page = 1;
 		},
 		setPaymentTypeFilter( state, action: PayloadAction< string > ) {
 			state.filters.paymentType = action.payload;
+			state.page = 1;
 		},
 		setChurnRiskFilter( state, action: PayloadAction< string > ) {
 			state.filters.churnRisk = action.payload;
+			state.page = 1;
 		},
 		clearFilters( state ) {
 			state.filters = DEFAULT_SUBSCRIPTION_FILTERS;
+			state.page = 1;
 		},
 	},
 	extraReducers: ( builder ) => {
@@ -140,6 +159,8 @@ const subscriptionsSlice = createSlice( {
 export const {
 	setSelectedSubscriptionId,
 	removeSubscription,
+	setPage,
+	setPerPage,
 	setSearch,
 	setStatusFilter,
 	setProductFilter,

@@ -435,17 +435,134 @@ class SubscriptionRepository {
 	 * @param string|null $status Optional status filter; null = all.
 	 * @return array<int, object>
 	 */
-	public function find_all( ?string $status = null ): array {
-		global $wpdb;
+	public function find_all(
+	array|string|null $status = null,
+	array|string|null $product = null,
+	array|string|null $cycle = null,
+	array|string|null $type = null,
+	array|string|null $payment_type = null,
+	array|string|null $churn_risk = null,
+	?string $search = null,
+	int $page = 1,
+	int $per_page = 20
+): array {
+	global $wpdb;
 
-		if ( null !== $status ) {
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Export query over a custom table.
-			return $wpdb->get_results(
-				$wpdb->prepare( "SELECT * FROM {$this->table()} WHERE status = %s ORDER BY id ASC", $status )
-			) ?: array();
+	$page = max( 1, $page );
+
+	$where  = array();
+	$params = array();
+
+	$add_in_filter = static function ( string $column, array|string|null $values ) use ( &$where, &$params ): void {
+		if ( null === $values ) {
+			return;
 		}
 
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Export query over a custom table.
-		return $wpdb->get_results( "SELECT * FROM {$this->table()} ORDER BY id ASC" ) ?: array();
+		// Allow passing a single scalar or an array.
+		$values = is_array( $values ) ? $values : array( $values );
+
+		// Remove empty/null values and normalize indexes.
+		$values = array_values(
+			array_filter(
+				$values,
+				static fn( $v ) => null !== $v && '' !== trim( (string) $v )
+			)
+		);
+
+		if ( empty( $values ) ) {
+			return;
+		}
+
+		$placeholders = implode( ', ', array_fill( 0, count( $values ), '%s' ) );
+		$where[]      = "{$column} IN ({$placeholders})";
+
+		foreach ( $values as $value ) {
+			$params[] = (string) $value;
+		}
+	};
+
+	/*
+	 * Filters (single or multiple values supported).
+	 */
+	$add_in_filter( 'status', $status );
+	$add_in_filter( 'product', $product );
+	$add_in_filter( 'cycle', $cycle );
+	$add_in_filter( 'type', $type );
+	$add_in_filter( 'payment_type', $payment_type );
+	$add_in_filter( 'churn_risk', $churn_risk );
+
+	/*
+	 * Search.
+	 */
+	if ( null !== $search && '' !== trim( $search ) ) {
+		$search = '%' . $wpdb->esc_like( trim( $search ) ) . '%';
+
+		$where[]  = '(product LIKE %s OR id LIKE %s)';
+		$params[] = $search;
+		$params[] = $search;
 	}
+
+	/*
+	 * Build WHERE clause.
+	 */
+	$where_sql = '';
+
+	if ( ! empty( $where ) ) {
+		$where_sql = ' WHERE ' . implode( ' AND ', $where );
+	}
+
+	/*
+	 * Count total matching records.
+	 */
+	$count_query = "SELECT COUNT(*) FROM {$this->table()}{$where_sql}";
+
+	if ( ! empty( $params ) ) {
+		$total = (int) $wpdb->get_var(
+			$wpdb->prepare( $count_query, ...$params )
+		);
+	} else {
+		$total = (int) $wpdb->get_var( $count_query );
+	}
+
+	/*
+	 * Get results.
+	 */
+	if ( -1 === $per_page ) {
+		$query = "SELECT *
+			FROM {$this->table()}
+			{$where_sql}
+			ORDER BY id ASC";
+
+		$query_params = $params;
+	} else {
+		$per_page = max( 1, $per_page );
+		$offset   = ( $page - 1 ) * $per_page;
+
+		$query = "SELECT *
+			FROM {$this->table()}
+			{$where_sql}
+			ORDER BY id ASC
+			LIMIT %d OFFSET %d";
+
+		$query_params   = $params;
+		$query_params[] = $per_page;
+		$query_params[] = $offset;
+	}
+
+	$results = ! empty( $query_params )
+		? $wpdb->get_results(
+			$wpdb->prepare( $query, ...$query_params )
+		)
+		: $wpdb->get_results( $query );
+
+	$results = $results ?: array();
+
+	return array(
+		'items'       => $results,
+		'total'       => $total,
+		'page'        => $page,
+		'per_page'    => $per_page,
+		'total_pages' => -1 === $per_page ? 1 : (int) ceil( $total / $per_page ),
+	);
+}
 }

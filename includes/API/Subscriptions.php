@@ -125,11 +125,48 @@ class Subscriptions extends PureCartApi {
 				'callback'            => array( $this, 'list_subscriptions' ),
 				'permission_callback' => array( $this, 'permission_admin' ),
 				'args'                => array(
-					'status' => array(
+					'status'       => array(
+						'type'     => array( 'string', 'array' ),
+						'required' => false,
+					),
+					'product'      => array(
+						'type'     => array( 'string', 'integer', 'array' ),
+						'required' => false,
+					),
+					'cycle'        => array(
+						'type'     => array( 'string', 'array' ),
+						'required' => false,
+					),
+					'type'         => array(
+						'type'     => array( 'string', 'array' ),
+						'required' => false,
+					),
+					'payment_type' => array(
+						'type'     => array( 'string', 'array' ),
+						'required' => false,
+					),
+					'churn_risk'   => array(
+						'type'     => array( 'string', 'array' ),
+						'required' => false,
+					),
+					'search'       => array(
 						'type'              => 'string',
-						'enum'              => array( 'active', 'trialing', 'paused', 'past_due', 'suspended', 'pending_cancel', 'cancelled', 'expired', 'completed' ),
-						'sanitize_callback' => 'sanitize_key',
+						'sanitize_callback' => 'sanitize_text_field',
 						'required'          => false,
+					),
+					'page'         => array(
+						'type'              => 'integer',
+						'default'           => 1,
+						'minimum'           => 1,
+						'sanitize_callback' => 'absint',
+						'required'          => false,
+					),
+					'per_page'     => array(
+						'type'     => 'integer',
+						'default'  => 20,
+						'minimum'  => -1,
+						'maximum'  => 100,
+						'required' => false,
 					),
 				),
 			)
@@ -347,22 +384,42 @@ class Subscriptions extends PureCartApi {
 	// -----------------------------------------------------------------------
 
 	/**
-	 * GET /subscriptions — admin list, optionally filtered by status.
+	 * GET /subscriptions — admin list, optionally filtered by status, product, cycle, type, payment_type, churn_risk, search, and paginated.
 	 *
 	 * @since 1.0.0
 	 * @param \WP_REST_Request $request REST request.
 	 * @return \WP_REST_Response
 	 */
 	public function list_subscriptions( \WP_REST_Request $request ): \WP_REST_Response {
-		$status = sanitize_key( (string) $request->get_param( 'status' ) );
+		$status       = $request->get_param( 'status' );
+		$product      = $request->get_param( 'product' );
+		$cycle        = $request->get_param( 'cycle' );
+		$type         = $request->get_param( 'type' );
+		$payment_type = $request->get_param( 'payment_type' );
+		$churn_risk   = $request->get_param( 'churn_risk' );
+		$search       = $request->get_param( 'search' );
+		$page         = (int) ( $request->get_param( 'page' ) ?? 1 );
+		$per_page     = (int) ( $request->get_param( 'per_page' ) ?? 20 );
 
-		// Resolves Step 12's own TODO here, which deferred this to Step 15:
-		// no filter now means *every* status, not a silent "active only"
-		// default that made the admin list look like subscriptions had
-		// vanished the moment they were paused or cancelled.
-		$rows = $this->subscriptions->find_all( '' !== $status ? $status : null );
+		$result = $this->subscriptions->find_all(
+			status:       ! empty( $status ) ? $status : null,
+			product:      ! empty( $product ) ? $product : null,
+			cycle:        ! empty( $cycle ) ? $cycle : null,
+			type:         ! empty( $type ) ? $type : null,
+			payment_type: ! empty( $payment_type ) ? $payment_type : null,
+			churn_risk:   ! empty( $churn_risk ) ? $churn_risk : null,
+			search:       ! empty( $search ) ? (string) $search : null,
+			page:         $page,
+			per_page:     $per_page
+		);
 
-		return rest_ensure_response( array_map( array( $this, 'prepare_subscription' ), $rows ) );
+		$prepared = array_map( array( $this, 'prepare_subscription' ), $result['items'] );
+
+		$response = rest_ensure_response( $prepared );
+		$response->header( 'X-WP-Total', (string) $result['total'] );
+		$response->header( 'X-WP-TotalPages', (string) $result['total_pages'] );
+
+		return $response;
 	}
 
 	/**
