@@ -7,7 +7,8 @@
  * @file
  * @since 1.0.0
  */
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { MoreVertical } from 'lucide-react';
 import { M3 } from '../../utils/static-data';
 
@@ -52,9 +53,67 @@ export function ActionDropdown( {
 	hint?: string;
 } ) {
 	const [ open, setOpen ] = useState( false );
+	const buttonRef = useRef< HTMLButtonElement >( null );
+	const [ position, setPosition ] = useState< {
+		top?: number;
+		bottom?: number;
+		right?: number;
+		left?: number;
+	} >( {} );
+
+	const updatePosition = useCallback( () => {
+		if ( ! buttonRef.current ) return;
+		const rect = buttonRef.current.getBoundingClientRect();
+		const spaceBelow = window.innerHeight - rect.bottom;
+		const spaceAbove = rect.top;
+		const openUp = spaceBelow < 280 && spaceAbove > spaceBelow;
+
+		const right = Math.max( 8, window.innerWidth - rect.right );
+
+		if ( openUp ) {
+			setPosition( {
+				bottom: window.innerHeight - rect.top + 4,
+				right,
+			} );
+		} else {
+			setPosition( {
+				top: rect.bottom + 4,
+				right,
+			} );
+		}
+	}, [] );
+
+	useEffect( () => {
+		if ( ! open ) return;
+
+		updatePosition();
+
+		const handleScrollOrResize = () => {
+			updatePosition();
+		};
+
+		const handleKeyDown = ( e: KeyboardEvent ) => {
+			if ( e.key === 'Escape' ) {
+				setOpen( false );
+			}
+		};
+
+		window.addEventListener( 'resize', handleScrollOrResize );
+		window.addEventListener( 'scroll', handleScrollOrResize, true );
+		window.addEventListener( 'keydown', handleKeyDown );
+
+		return () => {
+			window.removeEventListener( 'resize', handleScrollOrResize );
+			window.removeEventListener( 'scroll', handleScrollOrResize, true );
+			window.removeEventListener( 'keydown', handleKeyDown );
+		};
+	}, [ open, updatePosition ] );
+
 	return (
-		<div className="relative" style={ { isolation: 'isolate' } }>
+		<div className="relative inline-flex">
 			<button
+				ref={ buttonRef }
+				type="button"
 				onClick={ ( e ) => {
 					e.stopPropagation();
 					setOpen( ( o ) => ! o );
@@ -66,118 +125,137 @@ export function ActionDropdown( {
 					border: 'none',
 					cursor: 'pointer',
 				} }
+				title="Actions"
 			>
 				<MoreVertical size={ 16 } />
 			</button>
-			{ open && (
-				<>
-					<div
-						className="fixed inset-0 z-30"
-						onClick={ () => setOpen( false ) }
-					/>
-					<div
-						className="absolute right-0 z-40 rounded-xl overflow-hidden"
-						style={ {
-							top: 'calc(100% + 4px)',
-							minWidth: 210,
-							backgroundColor: M3.surface,
-							boxShadow:
-								'0 4px 8px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.10)',
-							border: `1px solid ${ M3.outlineVariant }`,
-						} }
-					>
-						{ hint && (
-							<div
-								className="px-4 py-2.5"
-								style={ {
-									backgroundColor: M3.surfaceContainerLow,
-									borderBottom: `1px solid ${ M3.outlineVariant }`,
-								} }
-							>
+			{ open &&
+				createPortal(
+					<>
+						<div
+							className="fixed inset-0"
+							style={ { zIndex: 9998 } }
+							onClick={ ( e ) => {
+								e.stopPropagation();
+								setOpen( false );
+							} }
+						/>
+						<div
+							className="fixed rounded-xl flex flex-col overflow-hidden"
+							style={ {
+								...position,
+								zIndex: 9999,
+								minWidth: 210,
+								maxHeight: 280,
+								backgroundColor: M3.surface,
+								boxShadow:
+									'0 4px 8px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.16)',
+								border: `1px solid ${ M3.outlineVariant }`,
+							} }
+							onClick={ ( e ) => e.stopPropagation() }
+						>
+							{ hint && (
 								<div
-									className="text-xs"
+									className="px-4 py-2.5 flex-shrink-0"
 									style={ {
-										color: M3.onSurfaceVariant,
-										fontFamily: 'Roboto, sans-serif',
+										backgroundColor: M3.surfaceContainerLow,
+										borderBottom: `1px solid ${ M3.outlineVariant }`,
 									} }
 								>
-									{ hint }
+									<div
+										className="text-xs font-medium"
+										style={ {
+											color: M3.onSurfaceVariant,
+											fontFamily: 'Roboto, sans-serif',
+										} }
+									>
+										{ hint }
+									</div>
 								</div>
-							</div>
-						) }
-						<div className="py-1">
-							{ actions.map( ( a, i ) => {
-								const Icon = a.icon;
-								return (
-									<div key={ i }>
-										{ a.dividerBefore && (
-											<div
-												className="my-1 mx-3"
-												style={ {
-													borderTop: `1px solid ${ M3.outlineVariant }`,
+							) }
+							<div
+								className="py-1 overflow-y-auto"
+								style={ {
+									overscrollBehavior: 'contain',
+								} }
+							>
+								{ actions.map( ( a, i ) => {
+									const Icon = a.icon;
+									return (
+										<div key={ i }>
+											{ a.dividerBefore && (
+												<div
+													className="my-1 mx-3"
+													style={ {
+														borderTop: `1px solid ${ M3.outlineVariant }`,
+													} }
+												/>
+											) }
+											<button
+												type="button"
+												disabled={ a.disabled }
+												onClick={ ( e ) => {
+													e.stopPropagation();
+													if ( ! a.disabled ) {
+														a.onClick();
+														setOpen( false );
+													}
 												} }
-											/>
-										) }
-										<button
-											disabled={ a.disabled }
-											onClick={ ( e ) => {
-												e.stopPropagation();
-												if ( ! a.disabled ) {
-													a.onClick();
-													setOpen( false );
-												}
-											} }
-											className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-left"
-											style={ {
-												background: 'none',
-												border: 'none',
-												cursor: a.disabled
-													? 'default'
-													: 'pointer',
-												color: a.disabled
-													? M3.outlineVariant
-													: a.danger
-													? M3.error
-													: M3.onSurface,
-												opacity: a.disabled ? 0.4 : 1,
-												fontFamily:
-													'Roboto, sans-serif',
-											} }
-											onMouseEnter={ ( e ) => {
-												if ( ! a.disabled )
-													(
-														e.currentTarget as HTMLElement
-													 ).style.backgroundColor =
-														a.danger
-															? '#FFDAD6'
-															: M3.surfaceContainerHigh;
-											} }
-											onMouseLeave={ ( e ) => {
-												(
-													e.currentTarget as HTMLElement
-												 ).style.backgroundColor =
-													'transparent';
-											} }
-										>
-											<Icon
-												size={ 15 }
-												color={
-													a.disabled
+												className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-left transition-colors"
+												style={ {
+													background: 'none',
+													border: 'none',
+													cursor: a.disabled
+														? 'default'
+														: 'pointer',
+													color: a.disabled
 														? M3.outlineVariant
 														: a.danger
 														? M3.error
-														: M3.onSurfaceVariant
-												}
-											/>
-											{ a.label }
-										</button>
-									</div>
-								);
-							} ) }
+														: M3.onSurface,
+													opacity: a.disabled
+														? 0.4
+														: 1,
+													fontFamily:
+														'Roboto, sans-serif',
+												} }
+												onMouseEnter={ ( e ) => {
+													if ( ! a.disabled ) {
+														(
+															e.currentTarget as HTMLElement
+														 ).style.backgroundColor =
+															a.danger
+																? '#FFDAD6'
+																: M3.surfaceContainerHigh;
+													}
+												} }
+												onMouseLeave={ ( e ) => {
+													(
+														e.currentTarget as HTMLElement
+													 ).style.backgroundColor =
+														'transparent';
+												} }
+											>
+												<Icon
+													size={ 15 }
+													color={
+														a.disabled
+															? M3.outlineVariant
+															: a.danger
+															? M3.error
+															: M3.onSurfaceVariant
+													}
+												/>
+												{ a.label }
+											</button>
+										</div>
+									);
+								} ) }
+							</div>
 						</div>
-					</div>
-				</>
-			) }
+					</>,
+					document.body
+				) }
 		</div>
 	);
 }
