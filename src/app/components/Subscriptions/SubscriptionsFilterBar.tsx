@@ -8,6 +8,7 @@
  * @file
  * @since 1.0.0
  */
+import { useState } from 'react';
 import { Search, Download as DownloadIcon } from 'lucide-react';
 import { M3 } from '../../utils/static-data';
 import { FilterChip } from '../ui/FilterChip';
@@ -22,8 +23,8 @@ export interface SubscriptionsFilterBarProps {
 	onFilterProductChange: ( v: string ) => void;
 	filterCycle: string;
 	onFilterCycleChange: ( v: string ) => void;
-	filterType: string;
-	onFilterTypeChange: ( v: string ) => void;
+	filterDeliveryType: string;
+	onFilterDeliveryTypeChange: ( v: string ) => void;
 	filterPaymentType: string;
 	onFilterPaymentTypeChange: ( v: string ) => void;
 	filterChurnRisk: string;
@@ -52,8 +53,8 @@ export function SubscriptionsFilterBar( {
 	onFilterProductChange,
 	filterCycle,
 	onFilterCycleChange,
-	filterType,
-	onFilterTypeChange,
+	filterDeliveryType,
+	onFilterDeliveryTypeChange,
 	filterPaymentType,
 	onFilterPaymentTypeChange,
 	filterChurnRisk,
@@ -63,11 +64,21 @@ export function SubscriptionsFilterBar( {
 	onClearAll,
 	onExportCsv,
 }: SubscriptionsFilterBarProps ) {
+	const [ openFilter, setOpenFilter ] = useState< string | null >( null );
+
+	const handleToggle = ( name: string ) => {
+		setOpenFilter( ( prev ) => ( prev === name ? null : name ) );
+	};
+
+	const handleClose = () => {
+		setOpenFilter( null );
+	};
+
 	const anyActive =
 		filterStatus !== 'All' ||
 		filterProduct !== 'All' ||
 		filterCycle !== 'All' ||
-		filterType !== 'All' ||
+		filterDeliveryType !== 'All' ||
 		filterPaymentType !== 'All' ||
 		filterChurnRisk !== 'All';
 
@@ -97,38 +108,73 @@ export function SubscriptionsFilterBar( {
 			<FilterChip
 				label="Status"
 				value={ filterStatus }
-				options={ [ 'Active', 'Paused', 'Past Due', 'Pending Cancel', 'Suspended', 'Cancelled', 'Trialing', 'Completed', 'Expired' ] }
+				options={ [
+					'Active',
+					'Paused',
+					'Past Due',
+					'Pending Cancel',
+					'Suspended',
+					'Cancelled',
+					'Trialing',
+					'Completed',
+					'Expired',
+				] }
 				onChange={ onFilterStatusChange }
+				isOpen={ openFilter === 'status' }
+				onToggle={ () => handleToggle( 'status' ) }
+				onClose={ handleClose }
 			/>
 			<FilterChip
 				label="Product"
 				value={ filterProduct }
 				options={ productOptions }
 				onChange={ onFilterProductChange }
+				isOpen={ openFilter === 'product' }
+				onToggle={ () => handleToggle( 'product' ) }
+				onClose={ handleClose }
 			/>
 			<FilterChip
 				label="Cycle"
 				value={ filterCycle }
 				options={ cycleOptions }
 				onChange={ onFilterCycleChange }
+				isOpen={ openFilter === 'cycle' }
+				onToggle={ () => handleToggle( 'cycle' ) }
+				onClose={ handleClose }
 			/>
 			<FilterChip
 				label="Type"
-				value={ filterType }
-				options={ [ 'Software', 'SaaS', 'Membership', 'Download', 'Course', 'Service' ] }
-				onChange={ onFilterTypeChange }
+				value={ filterDeliveryType }
+				options={ [
+					'Software',
+					'SaaS',
+					'Membership',
+					'Download',
+					'Course',
+					'Service',
+				] }
+				onChange={ onFilterDeliveryTypeChange }
+				isOpen={ openFilter === 'deliveryType' }
+				onToggle={ () => handleToggle( 'deliveryType' ) }
+				onClose={ handleClose }
 			/>
 			<FilterChip
 				label="Payment Type"
 				value={ filterPaymentType }
 				options={ [ 'Recurring', 'Split' ] }
 				onChange={ onFilterPaymentTypeChange }
+				isOpen={ openFilter === 'paymentType' }
+				onToggle={ () => handleToggle( 'paymentType' ) }
+				onClose={ handleClose }
 			/>
 			<FilterChip
 				label="Churn Risk"
 				value={ filterChurnRisk }
 				options={ [ 'Low', 'Medium', 'High', 'Critical' ] }
 				onChange={ onFilterChurnRiskChange }
+				isOpen={ openFilter === 'churnRisk' }
+				onToggle={ () => handleToggle( 'churnRisk' ) }
+				onClose={ handleClose }
 			/>
 			{ anyActive && (
 				<button
