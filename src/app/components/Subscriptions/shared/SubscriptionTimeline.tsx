@@ -10,7 +10,7 @@
  * @since 1.0.0
  */
 import { M3 } from '../../../utils/static-data';
-import type { SubscriptionLogEntry } from '../../../utils/subscription-types';
+import type { SubscriptionLogEntry } from '../types';
 
 const ACTOR_COLOR: Record< SubscriptionLogEntry[ 'actorType' ], string > = {
 	system: M3.onSurfaceVariant,

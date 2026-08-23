@@ -40,8 +40,8 @@ import {
 	Edit,
 } from 'lucide-react';
 import { fetchPaymentHistory } from '../../utils/api';
-import { addBillingInterval } from '../../utils/subscription-metrics';
-import type { SubscriptionRecord, PaymentRecord, RetentionOffer } from '../../utils/subscription-types';
+import { addBillingInterval } from './utils';
+import type { SubscriptionRecord, PaymentRecord, RetentionOffer } from './types';
 import { useAppDispatch } from '../../store/hooks';
 import { patchSubscription, removeSubscription } from '../../store/slices/subscriptionsSlice';
 import { ConfirmDialog, Toast } from '../ui';

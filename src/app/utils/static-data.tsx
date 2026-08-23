@@ -20,7 +20,7 @@ import type {
 	SubscriptionLogEntry,
 	SubscriptionEmailLogEntry,
 	SubscriptionSettings,
-} from './subscription-types';
+} from '../components/Subscriptions/types';
 
 // ─── M3 Color Tokens ──────────────────────────────────────────────────────────
 export const M3 = {

@@ -15,7 +15,7 @@ import { Tag } from 'lucide-react';
 import { M3, DISCOUNT_DURATIONS } from '../../../utils/static-data';
 import { TextButton } from '../../ui/TextButton';
 import { FilledButton } from '../../ui/FilledButton';
-import type { SubscriptionRecord } from '../../../utils/subscription-types';
+import type { SubscriptionRecord } from '../types';
 
 type DiscountDuration = ( typeof DISCOUNT_DURATIONS )[ number ];
 

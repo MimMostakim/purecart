@@ -11,7 +11,7 @@
  */
 import { M3 } from '../../utils/static-data';
 import { RevenueGoalCard } from '../Subscriptions/shared';
-import type { RevenueGoal } from '../../utils/subscription-types';
+import type { RevenueGoal } from '../Subscriptions/types';
 
 interface RevenueGoalsWidgetProps {
 	goals: RevenueGoal[];

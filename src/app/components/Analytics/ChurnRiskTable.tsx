@@ -15,7 +15,7 @@ import { Card } from '../ui/Card';
 import { StatusBadge } from '../ui/StatusBadge';
 import { TextButton } from '../ui/TextButton';
 import { ChurnScoreBadge } from '../Subscriptions/shared';
-import type { ChurnRiskEntry } from '../../utils/subscription-types';
+import type { ChurnRiskEntry } from '../Subscriptions/types';
 
 interface ChurnRiskTableProps {
 	entries: ChurnRiskEntry[];

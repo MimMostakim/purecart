@@ -13,7 +13,7 @@ import { Trash2 } from 'lucide-react';
 import { M3 } from '../../../utils/static-data';
 import { Card } from '../../ui/Card';
 import { IconButton } from '../../ui/IconButton';
-import type { RevenueGoal } from '../../../utils/subscription-types';
+import type { RevenueGoal } from '../types';
 
 const TYPE_LABEL: Record< RevenueGoal[ 'type' ], string > = {
 	mrr: 'MRR',

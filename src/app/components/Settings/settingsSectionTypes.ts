@@ -1,4 +1,4 @@
-import type { SubscriptionSettings } from '../../utils/subscription-types';
+import type { SubscriptionSettings } from '../Subscriptions/types';
 
 /** Shared prop shape every Settings section component receives. */
 export interface SettingsSectionProps {

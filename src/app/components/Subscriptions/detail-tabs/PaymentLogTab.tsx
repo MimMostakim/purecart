@@ -10,7 +10,7 @@
 import { M3 } from '../../../utils/static-data';
 import { Card } from '../../ui/Card';
 import { OutlinedButton } from '../../ui/OutlinedButton';
-import type { SubscriptionRecord, PaymentRecord } from '../../../utils/subscription-types';
+import type { SubscriptionRecord, PaymentRecord } from '../types';
 
 const STATUS_STYLE: Record< string, { color: string; bg: string; label: string } > = {
 	paid: { color: M3.success, bg: M3.successContainer, label: 'Paid' },

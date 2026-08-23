@@ -11,7 +11,7 @@
 import { M3, CANCELLATION_REASONS } from '../../../utils/static-data';
 import { Card } from '../../ui/Card';
 import { SubscriptionTimeline } from '../shared';
-import type { SubscriptionRecord, SubscriptionLogEntry } from '../../../utils/subscription-types';
+import type { SubscriptionRecord, SubscriptionLogEntry } from '../types';
 
 interface RetentionTabProps {
 	row: SubscriptionRecord;

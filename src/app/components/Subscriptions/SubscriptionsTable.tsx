@@ -15,7 +15,7 @@ import { Card } from '../ui/Card';
 import { StatusBadge } from '../ui/StatusBadge';
 import { ActionDropdown, type ActionItem } from '../ui/ActionDropdown';
 import { SubscriptionTypeBadge, TYPE_CONFIG, ChurnScoreBadge, InstallmentProgress } from './shared';
-import type { SubscriptionRecord, SubscriptionLinkedEntity } from '../../utils/subscription-types';
+import type { SubscriptionRecord, SubscriptionLinkedEntity } from './types';
 
 /**
  * Renders the type-specific "Linked" column content for one row.
@@ -276,7 +276,7 @@ export function SubscriptionsTable({
 												fontFamily: 'Roboto, sans-serif',
 											}}
 										>
-											{row.billing.displayLabel}
+											{row.billing?.displayLabel ?? ''}
 										</span>
 									</td>
 									<td className="px-3 py-3">
@@ -286,7 +286,7 @@ export function SubscriptionsTable({
 										className="px-3 py-3 text-xs"
 										style={{ color: M3.onSurfaceVariant, fontFamily: 'Roboto, sans-serif' }}
 									>
-										<LinkedEntityCell entity={row.linkedEntity} />
+										{row.linkedEntity && <LinkedEntityCell entity={row.linkedEntity} />}
 									</td>
 									<td
 										className="px-3 py-3 text-sm font-medium"

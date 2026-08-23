@@ -16,7 +16,7 @@ import { M3, CANCELLATION_REASONS } from '../../../utils/static-data';
 import { TextButton } from '../../ui/TextButton';
 import { FilledButton } from '../../ui/FilledButton';
 import { StepIndicator, CancellationReasonList, RetentionOfferCard } from '../shared';
-import type { SubscriptionRecord, RetentionOffer } from '../../../utils/subscription-types';
+import type { SubscriptionRecord, RetentionOffer } from '../types';
 
 type Step = 0 | 1 | 2;
 

@@ -3,8 +3,7 @@
  *
  * Every subscription-related interface lives here rather than inline in
  * static-data.tsx, so components can `import type { ... }` without pulling
- * in sample data. See docs/subscription-module/frontend-dev-plan/01-data-model.md
- * for the full rationale behind each shape.
+ * in sample data.
  *
  * @file
  * @since 1.0.0

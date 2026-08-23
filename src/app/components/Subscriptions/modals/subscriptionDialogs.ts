@@ -11,7 +11,7 @@
  */
 import { FastForward, SkipForward, Lock, CreditCard } from 'lucide-react';
 import type { ConfirmDialogProps } from '../../ui';
-import type { SubscriptionRecord } from '../../../utils/subscription-types';
+import type { SubscriptionRecord } from '../types';
 
 type DialogConfig = Omit< ConfirmDialogProps, 'onCancel' >;
 

@@ -10,8 +10,8 @@
  */
 import { M3 } from '../../utils/static-data';
 import { StatCard } from '../ui/StatCard';
-import { computeMRR, isCancelledThisMonth, formatCurrency } from '../../utils/subscription-metrics';
-import type { SubscriptionRecord } from '../../utils/subscription-types';
+import { computeMRR, isCancelledThisMonth, formatCurrency } from './utils';
+import type { SubscriptionRecord } from './types';
 
 /**
  * Renders 6 stat cards summarizing the full subscription data set.

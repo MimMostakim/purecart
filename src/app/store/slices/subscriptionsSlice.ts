@@ -19,7 +19,7 @@ import {
 	fetchSubscriptions,
 	updateSubscription as apiUpdateSubscription,
 } from '../../utils/api';
-import type { SubscriptionRecord } from '../../utils/subscription-types';
+import type { SubscriptionRecord } from '../../components/Subscriptions/types';
 
 export interface SubscriptionFilters {
 	search: string;

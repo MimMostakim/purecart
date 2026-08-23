@@ -9,7 +9,7 @@
  * @since 1.0.0
  */
 import { M3 } from '../../../utils/static-data';
-import type { CancellationReason } from '../../../utils/subscription-types';
+import type { CancellationReason } from '../types';
 
 /**
  * Renders a selectable list of cancellation reasons with an inline optional

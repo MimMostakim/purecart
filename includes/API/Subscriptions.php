@@ -570,6 +570,25 @@ class Subscriptions extends PureCartApi {
 		// score instead of each re-implementing the 25/50/75 band boundaries.
 		$data['churn_band'] = ChurnScorer::band( (int) $subscription->churn_risk_score );
 
+		$interval = (int) ( $data['billing_interval'] ?? 1 );
+		$period   = (string) ( $data['billing_period'] ?? 'month' );
+		$label    = 1 === $interval ? ucfirst( $period ) . 'ly' : sprintf( 'Every %d %ss', $interval, $period );
+		if ( 'dayly' === strtolower( $label ) ) {
+			$label = 'Daily';
+		} elseif ( 'weekly' === strtolower( $label ) ) {
+			$label = 'Weekly';
+		} elseif ( 'monthly' === strtolower( $label ) ) {
+			$label = 'Monthly';
+		} elseif ( 'yearly' === strtolower( $label ) ) {
+			$label = 'Yearly';
+		}
+
+		$data['billing'] = array(
+			'interval'     => $interval,
+			'period'       => $period,
+			'displayLabel' => $label,
+		);
+
 		/**
 		 * Filters one subscription's REST representation.
 		 *
