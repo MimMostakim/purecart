@@ -54,6 +54,26 @@ class SubscriptionProduct {
 		add_action( 'woocommerce_process_product_meta', array( $this, 'save_meta' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_toggle_script' ) );
 
+		// Render the add-to-cart form on the single product page.
+		//
+		// Gap found in Step 3 and only surfaced by live testing: WooCommerce's
+		// woocommerce_template_single_add_to_cart() dispatches
+		// `do_action( 'woocommerce_' . $product->get_type() . '_add_to_cart' )`
+		// (wc-template-functions.php), and wc-template-hooks.php registers a
+		// handler for exactly four core types — simple, grouped, variable,
+		// external. A custom product type gets no handler at all, so the whole
+		// add-to-cart area silently renders as nothing: no button, no quantity
+		// field, no price. The product looked un-buyable even though it was
+		// perfectly purchasable.
+		//
+		// Reuses core's own `woocommerce_simple_add_to_cart` at the same
+		// priority core uses (30), because a subscription buys exactly like a
+		// simple product from the customer's point of view — one quantity, one
+		// button. The recurring terms are shown separately below.
+		add_action( 'woocommerce_' . self::TYPE . '_add_to_cart', 'woocommerce_simple_add_to_cart', 30 );
+		add_action( 'woocommerce_single_product_summary', array( $this, 'render_billing_terms' ), 11 );
+		add_filter( 'woocommerce_get_price_html', array( $this, 'append_billing_suffix' ), 10, 2 );
+
 		// Step 14 additions — see save_meta()'s price-sync comment and the
 		// class docblock note above adjust_cart_prices() for why these exist.
 		add_action( 'woocommerce_before_calculate_totals', array( $this, 'adjust_cart_prices' ) );
@@ -559,6 +579,118 @@ class SubscriptionProduct {
 	}
 
 	// -----------------------------------------------------------------------
+	// Storefront display
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Human-readable billing cycle, e.g. "every 3 months" / "monthly".
+	 *
+	 * @since 1.0.0
+	 * @param \WC_Product $product Subscription product.
+	 * @return string
+	 */
+	private function billing_cycle_label( \WC_Product $product ): string {
+		$interval = max( 1, (int) $product->get_meta( '_purecart_sub_interval' ) );
+		$period   = (string) ( $product->get_meta( '_purecart_sub_period' ) ?: 'month' );
+
+		if ( 1 === $interval ) {
+			$singular = array(
+				'day'   => __( 'daily', 'purecart' ),
+				'week'  => __( 'weekly', 'purecart' ),
+				'month' => __( 'monthly', 'purecart' ),
+				'year'  => __( 'yearly', 'purecart' ),
+			);
+			return $singular[ $period ] ?? $singular['month'];
+		}
+
+		$plural = array(
+			'day'   => __( 'every %d days', 'purecart' ),
+			'week'  => __( 'every %d weeks', 'purecart' ),
+			'month' => __( 'every %d months', 'purecart' ),
+			'year'  => __( 'every %d years', 'purecart' ),
+		);
+
+		return sprintf( $plural[ $period ] ?? $plural['month'], $interval );
+	}
+
+	/**
+	 * Append the billing cycle to the price on shop/product pages, so "$18"
+	 * reads as "$18 / monthly" rather than looking like a one-off purchase.
+	 *
+	 * @since 1.0.0
+	 * @param string      $price_html Existing price HTML.
+	 * @param \WC_Product $product    The product being priced.
+	 * @return string
+	 */
+	public function append_billing_suffix( string $price_html, $product ): string {
+		if ( ! $product instanceof \WC_Product || self::TYPE !== $product->get_type() || '' === $price_html ) {
+			return $price_html;
+		}
+
+		return $price_html . ' <span class="purecart-billing-cycle">/ ' . esc_html( $this->billing_cycle_label( $product ) ) . '</span>';
+	}
+
+	/**
+	 * Print the subscription's terms (trial, sign-up fee, length) under the
+	 * price on the single product page — the things a customer is agreeing to
+	 * that a bare price can't convey.
+	 *
+	 * @since 1.0.0
+	 * @return void
+	 */
+	public function render_billing_terms(): void {
+		global $product;
+
+		if ( ! $product instanceof \WC_Product || self::TYPE !== $product->get_type() ) {
+			return;
+		}
+
+		$lines = array();
+
+		$trial_length = (int) $product->get_meta( '_purecart_sub_trial_length' );
+		if ( $trial_length > 0 ) {
+			$trial_period = (string) ( $product->get_meta( '_purecart_sub_trial_period' ) ?: 'day' );
+			$units        = array(
+				'day'   => _n( '%d day', '%d days', $trial_length, 'purecart' ),
+				'week'  => _n( '%d week', '%d weeks', $trial_length, 'purecart' ),
+				'month' => _n( '%d month', '%d months', $trial_length, 'purecart' ),
+			);
+			$lines[]      = sprintf(
+				/* translators: %s: trial length, e.g. "14 days" */
+				__( 'Includes a free trial of %s.', 'purecart' ),
+				sprintf( $units[ $trial_period ] ?? $units['day'], $trial_length )
+			);
+		}
+
+		$signup_fee = (float) wc_format_decimal( $product->get_meta( '_purecart_sub_signup_fee' ) );
+		if ( $signup_fee > 0 ) {
+			$lines[] = sprintf(
+				/* translators: %s: formatted sign-up fee */
+				__( 'A one-time sign-up fee of %s applies.', 'purecart' ),
+				wp_strip_all_tags( wc_price( $signup_fee ) )
+			);
+		}
+
+		$length = (int) $product->get_meta( '_purecart_sub_length' );
+		if ( $length > 0 ) {
+			$length_period = (string) ( $product->get_meta( '_purecart_sub_length_period' ) ?: 'month' );
+			$units         = array(
+				'month' => _n( '%d month', '%d months', $length, 'purecart' ),
+				'year'  => _n( '%d year', '%d years', $length, 'purecart' ),
+			);
+			$lines[]       = sprintf(
+				/* translators: %s: total subscription length, e.g. "12 months" */
+				__( 'Runs for %s, then ends automatically.', 'purecart' ),
+				sprintf( $units[ $length_period ] ?? $units['month'], $length )
+			);
+		} else {
+			$lines[] = __( 'Renews automatically until cancelled.', 'purecart' );
+		}
+
+		echo '<div class="purecart-subscription-terms"><small>' . esc_html( implode( ' ', $lines ) ) . '</small></div>';
+	}
+
+	// -----------------------------------------------------------------------
 	// Cart/checkout integration (Step 14 gap-fill — feature doc § 4/§ 20)
 	// -----------------------------------------------------------------------
 
@@ -661,11 +793,48 @@ class SubscriptionProduct {
 			return $gateways;
 		}
 
-		foreach ( array( 'cod', 'cheque', 'bacs' ) as $non_tokenizing_gateway ) {
-			unset( $gateways[ $non_tokenizing_gateway ] );
+		/**
+		 * Gateways hidden from checkout when the cart contains a subscription.
+		 *
+		 * Default: WooCommerce's three built-in offline methods, none of which
+		 * can store a reusable payment token — so RenewalEngine would have
+		 * nothing to charge and every renewal after the first would fail.
+		 *
+		 * Filterable as of a correction to this method's first version, which
+		 * hardcoded the list with no way to override it. That was too rigid in
+		 * two real cases: a merchant who bills subscriptions by manual invoice
+		 * and reconciles bank transfers by hand, and a test/staging site where
+		 * these are the only gateways configured at all — there, hiding all
+		 * three leaves checkout with no payment method whatsoever.
+		 *
+		 * Return an empty array to disable the filtering entirely:
+		 *     add_filter( 'purecart_subscription_blocked_gateways', '__return_empty_array' );
+		 *
+		 * @since 1.0.0
+		 * @param string[]                           $blocked  Gateway IDs to hide.
+		 * @param array<string, \WC_Payment_Gateway> $gateways All currently available gateways.
+		 */
+		$blocked = (array) apply_filters(
+			'purecart_subscription_blocked_gateways',
+			array( 'cod', 'cheque', 'bacs' ),
+			$gateways
+		);
+
+		$filtered = $gateways;
+		foreach ( $blocked as $gateway_id ) {
+			unset( $filtered[ (string) $gateway_id ] );
 		}
 
-		return $gateways;
+		// Never leave checkout with zero payment methods. If filtering would
+		// remove everything, the customer simply cannot buy — a worse outcome
+		// than letting them through on a gateway that can't auto-renew (the
+		// renewal will fail loudly later, and dunning will surface it, whereas
+		// an empty checkout fails silently and looks like a broken store).
+		if ( empty( $filtered ) && ! empty( $gateways ) ) {
+			return $gateways;
+		}
+
+		return $filtered;
 	}
 
 	/**

@@ -18,6 +18,7 @@ use PureCart\CustomerDashboard\Dashboard;
 use PureCart\Downloads\AccountDownloadsMerger;
 use PureCart\Admin\Admin;
 use PureCart\Subscriptions\Module as SubscriptionsModule;
+use PureCart\Updates\Module as UpdatesModule;
 
 /**
  * Plugin singleton.
@@ -61,6 +62,7 @@ final class Plugin {
 		new Dashboard();
 		new AccountDownloadsMerger();
 		new SubscriptionsModule();
+		new UpdatesModule();
 
 		if ( is_admin() ) {
 			new Admin();
