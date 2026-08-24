@@ -201,11 +201,9 @@ class Subscriptions extends PureCartApi {
 				'permission_callback' => array( $this, 'permission_owner_or_admin' ),
 				'args'                => array(
 					'resume_at' => array(
-						'type'              => 'string',
-						'format'            => 'date-time',
-						'sanitize_callback' => 'sanitize_text_field',
-						'required'          => false,
-						'description'       => 'Optional MySQL datetime (Y-m-d H:i:s) at which to auto-resume the subscription.',
+						'type'        => array( 'string', 'null' ),
+						'required'    => false,
+						'description' => 'Optional MySQL datetime (Y-m-d H:i:s) or date string at which to auto-resume the subscription.',
 					),
 				),
 			)
@@ -620,7 +618,15 @@ class Subscriptions extends PureCartApi {
 		$id        = (int) $request->get_param( 'id' );
 		$resume_at = $request->get_param( 'resume_at' );
 
-		$success = $this->manager->pause( $id, $resume_at ? sanitize_text_field( (string) $resume_at ) : null );
+		$resume_datetime = null;
+		if ( ! empty( $resume_at ) ) {
+			$ts = strtotime( (string) $resume_at );
+			if ( $ts ) {
+				$resume_datetime = gmdate( 'Y-m-d H:i:s', $ts );
+			}
+		}
+
+		$success = $this->manager->pause( $id, $resume_datetime );
 
 		return $this->action_result( $success, $id, __( 'Could not pause this subscription.', 'purecart' ) );
 	}

@@ -49,6 +49,7 @@ export function FilterChip( {
 	const open = isControlled ? isOpen : internalOpen;
 
 	const buttonRef = useRef< HTMLButtonElement >( null );
+	const menuRef = useRef< HTMLDivElement >( null );
 	const [ position, setPosition ] = useState< {
 		top?: number;
 		bottom?: number;
@@ -110,14 +111,28 @@ export function FilterChip( {
 			}
 		};
 
+		const handlePointerDown = ( e: MouseEvent | TouchEvent ) => {
+			const target = e.target as Node | null;
+			if ( ! target ) return;
+			if (
+				menuRef.current?.contains( target ) ||
+				buttonRef.current?.contains( target )
+			) {
+				return;
+			}
+			handleClose();
+		};
+
 		window.addEventListener( 'resize', handleScrollOrResize );
 		window.addEventListener( 'scroll', handleScrollOrResize, true );
 		window.addEventListener( 'keydown', handleKeyDown );
+		document.addEventListener( 'pointerdown', handlePointerDown );
 
 		return () => {
 			window.removeEventListener( 'resize', handleScrollOrResize );
 			window.removeEventListener( 'scroll', handleScrollOrResize, true );
 			window.removeEventListener( 'keydown', handleKeyDown );
+			document.removeEventListener( 'pointerdown', handlePointerDown );
 		};
 	}, [ open, updatePosition ] );
 
@@ -176,87 +191,78 @@ export function FilterChip( {
 			</button>
 			{ open &&
 				createPortal(
-					<>
+					<div
+						ref={ menuRef }
+						className="fixed rounded-xl overflow-hidden flex flex-col"
+						style={ {
+							...position,
+							zIndex: 9999,
+							minWidth: 168,
+							maxHeight: 280,
+							backgroundColor: M3.surface,
+							boxShadow:
+								'0 4px 8px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.16)',
+							border: `1px solid ${ M3.outlineVariant }`,
+						} }
+						onClick={ ( e ) => e.stopPropagation() }
+					>
 						<div
-							className="fixed inset-0"
-							style={ { zIndex: 9998 } }
-							onClick={ ( e ) => {
-								e.stopPropagation();
-								handleClose();
-							} }
-						/>
-						<div
-							className="fixed rounded-xl overflow-hidden flex flex-col"
-							style={ {
-								...position,
-								zIndex: 9999,
-								minWidth: 168,
-								maxHeight: 280,
-								backgroundColor: M3.surface,
-								boxShadow:
-									'0 4px 8px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.16)',
-								border: `1px solid ${ M3.outlineVariant }`,
-							} }
-							onClick={ ( e ) => e.stopPropagation() }
+							className="py-1 overflow-y-auto"
+							style={ { overscrollBehavior: 'contain' } }
 						>
-							<div
-								className="py-1 overflow-y-auto"
-								style={ { overscrollBehavior: 'contain' } }
-							>
-								{ [ 'All', ...options ].map( ( opt ) => (
-									<button
-										key={ opt }
-										type="button"
-										onClick={ () => {
-											onChange( opt );
-											handleClose();
-										} }
-										className="flex items-center justify-between w-full px-4 py-2.5 text-sm text-left transition-colors"
-										style={ {
-											background: 'none',
-											border: 'none',
-											cursor: 'pointer',
-											color:
-												value === opt ||
-												( opt === 'All' && value === 'All' )
-													? M3.primary
-													: M3.onSurface,
-											backgroundColor:
-												value === opt && opt !== 'All'
-													? `${ M3.primary }10`
-													: 'transparent',
-											fontFamily: 'Roboto, sans-serif',
-											fontWeight: value === opt ? 500 : 400,
-										} }
-										onMouseEnter={ ( e ) => {
-											(
-												e.currentTarget as HTMLElement
-											 ).style.backgroundColor =
-												value === opt && opt !== 'All'
-													? `${ M3.primary }10`
-													: M3.surfaceContainerHigh;
-										} }
-										onMouseLeave={ ( e ) => {
-											(
-												e.currentTarget as HTMLElement
-											 ).style.backgroundColor =
-												value === opt && opt !== 'All'
-													? `${ M3.primary }10`
-													: 'transparent';
-										} }
-									>
-										{ opt === 'All' ? getSelectAllLabel() : opt }
-										{ value === opt && opt !== 'All' && (
-											<Check
-												size={ 13 }
-												color={ M3.primary }
-											/>
-										) }
-									</button>
-								) ) }
-							</div>
+							{ [ 'All', ...options ].map( ( opt ) => (
+								<button
+									key={ opt }
+									type="button"
+									onClick={ () => {
+										onChange( opt );
+										handleClose();
+									} }
+									className="flex items-center justify-between w-full px-4 py-2.5 text-sm text-left transition-colors"
+									style={ {
+										background: 'none',
+										border: 'none',
+										cursor: 'pointer',
+										color:
+											value === opt ||
+											( opt === 'All' && value === 'All' )
+												? M3.primary
+												: M3.onSurface,
+										backgroundColor:
+											value === opt && opt !== 'All'
+												? `${ M3.primary }10`
+												: 'transparent',
+										fontFamily: 'Roboto, sans-serif',
+										fontWeight: value === opt ? 500 : 400,
+									} }
+									onMouseEnter={ ( e ) => {
+										(
+											e.currentTarget as HTMLElement
+										 ).style.backgroundColor =
+											value === opt && opt !== 'All'
+												? `${ M3.primary }10`
+												: M3.surfaceContainerHigh;
+									} }
+									onMouseLeave={ ( e ) => {
+										(
+											e.currentTarget as HTMLElement
+										 ).style.backgroundColor =
+											value === opt && opt !== 'All'
+												? `${ M3.primary }10`
+												: 'transparent';
+									} }
+								>
+									{ opt === 'All' ? getSelectAllLabel() : opt }
+									{ value === opt && opt !== 'All' && (
+										<Check
+											size={ 13 }
+											color={ M3.primary }
+										/>
+									) }
+								</button>
+							) ) }
 						</div>
-					</>,
+					</div>,
 					document.body
 				) }
 		</div>

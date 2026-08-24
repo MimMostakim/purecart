@@ -54,6 +54,7 @@ export function ActionDropdown( {
 } ) {
 	const [ open, setOpen ] = useState( false );
 	const buttonRef = useRef< HTMLButtonElement >( null );
+	const menuRef = useRef< HTMLDivElement >( null );
 	const [ position, setPosition ] = useState< {
 		top?: number;
 		bottom?: number;
@@ -98,14 +99,28 @@ export function ActionDropdown( {
 			}
 		};
 
+		const handlePointerDown = ( e: MouseEvent | TouchEvent ) => {
+			const target = e.target as Node | null;
+			if ( ! target ) return;
+			if (
+				menuRef.current?.contains( target ) ||
+				buttonRef.current?.contains( target )
+			) {
+				return;
+			}
+			setOpen( false );
+		};
+
 		window.addEventListener( 'resize', handleScrollOrResize );
 		window.addEventListener( 'scroll', handleScrollOrResize, true );
 		window.addEventListener( 'keydown', handleKeyDown );
+		document.addEventListener( 'pointerdown', handlePointerDown );
 
 		return () => {
 			window.removeEventListener( 'resize', handleScrollOrResize );
 			window.removeEventListener( 'scroll', handleScrollOrResize, true );
 			window.removeEventListener( 'keydown', handleKeyDown );
+			document.removeEventListener( 'pointerdown', handlePointerDown );
 		};
 	}, [ open, updatePosition ] );
 
@@ -131,129 +146,120 @@ export function ActionDropdown( {
 			</button>
 			{ open &&
 				createPortal(
-					<>
-						<div
-							className="fixed inset-0"
-							style={ { zIndex: 9998 } }
-							onClick={ ( e ) => {
-								e.stopPropagation();
-								setOpen( false );
-							} }
-						/>
-						<div
-							className="fixed rounded-xl flex flex-col overflow-hidden"
-							style={ {
-								...position,
-								zIndex: 9999,
-								minWidth: 210,
-								maxHeight: 280,
-								backgroundColor: M3.surface,
-								boxShadow:
-									'0 4px 8px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.16)',
-								border: `1px solid ${ M3.outlineVariant }`,
-							} }
-							onClick={ ( e ) => e.stopPropagation() }
-						>
-							{ hint && (
-								<div
-									className="px-4 py-2.5 flex-shrink-0"
-									style={ {
-										backgroundColor: M3.surfaceContainerLow,
-										borderBottom: `1px solid ${ M3.outlineVariant }`,
-									} }
-								>
-									<div
-										className="text-xs font-medium"
-										style={ {
-											color: M3.onSurfaceVariant,
-											fontFamily: 'Roboto, sans-serif',
-										} }
-									>
-										{ hint }
-									</div>
-								</div>
-							) }
+					<div
+						ref={ menuRef }
+						className="fixed rounded-xl flex flex-col overflow-hidden"
+						style={ {
+							...position,
+							zIndex: 9999,
+							minWidth: 210,
+							maxHeight: 280,
+							backgroundColor: M3.surface,
+							boxShadow:
+								'0 4px 8px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.16)',
+							border: `1px solid ${ M3.outlineVariant }`,
+						} }
+						onClick={ ( e ) => e.stopPropagation() }
+					>
+						{ hint && (
 							<div
-								className="py-1 overflow-y-auto"
+								className="px-4 py-2.5 flex-shrink-0"
 								style={ {
-									overscrollBehavior: 'contain',
+									backgroundColor: M3.surfaceContainerLow,
+									borderBottom: `1px solid ${ M3.outlineVariant }`,
 								} }
 							>
-								{ actions.map( ( a, i ) => {
-									const Icon = a.icon;
-									return (
-										<div key={ i }>
-											{ a.dividerBefore && (
-												<div
-													className="my-1 mx-3"
-													style={ {
-														borderTop: `1px solid ${ M3.outlineVariant }`,
-													} }
-												/>
-											) }
-											<button
-												type="button"
-												disabled={ a.disabled }
-												onClick={ ( e ) => {
-													e.stopPropagation();
-													if ( ! a.disabled ) {
-														a.onClick();
-														setOpen( false );
-													}
-												} }
-												className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-left transition-colors"
+								<div
+									className="text-xs font-medium"
+									style={ {
+										color: M3.onSurfaceVariant,
+										fontFamily: 'Roboto, sans-serif',
+									} }
+								>
+									{ hint }
+								</div>
+							</div>
+						) }
+						<div
+							className="py-1 overflow-y-auto"
+							style={ {
+								overscrollBehavior: 'contain',
+							} }
+						>
+							{ actions.map( ( a, i ) => {
+								const Icon = a.icon;
+								return (
+									<div key={ i }>
+										{ a.dividerBefore && (
+											<div
+												className="my-1 mx-3"
 												style={ {
-													background: 'none',
-													border: 'none',
-													cursor: a.disabled
-														? 'default'
-														: 'pointer',
-													color: a.disabled
-														? M3.outlineVariant
-														: a.danger
-														? M3.error
-														: M3.onSurface,
-													opacity: a.disabled
-														? 0.4
-														: 1,
-													fontFamily:
-														'Roboto, sans-serif',
+													borderTop: `1px solid ${ M3.outlineVariant }`,
 												} }
-												onMouseEnter={ ( e ) => {
-													if ( ! a.disabled ) {
-														(
-															e.currentTarget as HTMLElement
-														 ).style.backgroundColor =
-															a.danger
-																? '#FFDAD6'
-																: M3.surfaceContainerHigh;
-													}
-												} }
-												onMouseLeave={ ( e ) => {
+											/>
+										) }
+										<button
+											type="button"
+											disabled={ a.disabled }
+											onClick={ ( e ) => {
+												e.stopPropagation();
+												if ( ! a.disabled ) {
+													a.onClick();
+													setOpen( false );
+												}
+											} }
+											className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-left transition-colors"
+											style={ {
+												background: 'none',
+												border: 'none',
+												cursor: a.disabled
+													? 'default'
+													: 'pointer',
+												color: a.disabled
+													? M3.outlineVariant
+													: a.danger
+													? M3.error
+													: M3.onSurface,
+												opacity: a.disabled
+													? 0.4
+													: 1,
+												fontFamily:
+													'Roboto, sans-serif',
+											} }
+											onMouseEnter={ ( e ) => {
+												if ( ! a.disabled ) {
 													(
 														e.currentTarget as HTMLElement
 													 ).style.backgroundColor =
-														'transparent';
-												} }
-											>
-												<Icon
-													size={ 15 }
-													color={
-														a.disabled
-															? M3.outlineVariant
-															: a.danger
-															? M3.error
-															: M3.onSurfaceVariant
-													}
-												/>
-												{ a.label }
-											</button>
-										</div>
-									);
-								} ) }
-							</div>
+														a.danger
+															? '#FFDAD6'
+															: M3.surfaceContainerHigh;
+												}
+											} }
+											onMouseLeave={ ( e ) => {
+												(
+													e.currentTarget as HTMLElement
+												 ).style.backgroundColor =
+													'transparent';
+											} }
+										>
+											<Icon
+												size={ 15 }
+												color={
+													a.disabled
+														? M3.outlineVariant
+														: a.danger
+														? M3.error
+														: M3.onSurfaceVariant
+												}
+											/>
+											{ a.label }
+										</button>
+									</div>
+								);
+							} ) }
 						</div>
-					</>,
+					</div>,
 					document.body
 				) }
 		</div>

@@ -68,6 +68,7 @@ export function SubscriptionDetailPage() {
 		sendCardUpdateEmail,
 		openCancelFlow,
 		openPauseModal,
+		openResumeModal,
 		showToast,
 		openDialog,
 		closeDialog,
@@ -134,9 +135,19 @@ export function SubscriptionDetailPage() {
 					</button>
 					<div className="flex items-center gap-2">
 						<StatusBadge status={row.status} />
-						<OutlinedButton small onClick={() => openPauseModal(row)}>
-							Pause
-						</OutlinedButton>
+						{row.status === 'paused' ? (
+							<OutlinedButton small onClick={() => openResumeModal(row)}>
+								Resume
+							</OutlinedButton>
+						) : (
+							<OutlinedButton
+								small
+								onClick={() => openPauseModal(row)}
+								disabled={row.status === 'cancelled' || row.status === 'expired' || row.status === 'completed'}
+							>
+								Pause
+							</OutlinedButton>
+						)}
 						<OutlinedButton small danger onClick={() => openCancelFlow(row)}>
 							Cancel
 						</OutlinedButton>

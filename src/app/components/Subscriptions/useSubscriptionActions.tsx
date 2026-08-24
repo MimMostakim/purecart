@@ -43,7 +43,14 @@ import { fetchPaymentHistory } from '../../utils/api';
 import { addBillingInterval } from './utils';
 import type { SubscriptionRecord, PaymentRecord, RetentionOffer } from './types';
 import { useAppDispatch } from '../../store/hooks';
-import { patchSubscription, removeSubscription } from '../../store/slices/subscriptionsSlice';
+import {
+	patchSubscription,
+	removeSubscription,
+	earlyRenewSubscriptionThunk,
+	retryPaymentThunk,
+	pauseSubscriptionThunk,
+	resumeSubscriptionThunk,
+} from '../../store/slices/subscriptionsSlice';
 import { ConfirmDialog, Toast } from '../ui';
 import type { ActionItem, ConfirmDialogProps, ToastProps } from '../ui';
 import {
@@ -162,9 +169,13 @@ export function useSubscriptionActions() {
 						danger: false, icon: RefreshCw, title: 'Retry Payment?',
 						body: <span>Attempt to charge <strong>{row.amount}</strong> from <strong>{row.customer}</strong>'s payment method on file immediately?</span>,
 						confirmLabel: 'Retry Payment',
-						onConfirm: () => {
-							updateRow(row.id, { status: 'active', nextPayment: addBillingInterval(null, row.billing) });
-							showToast(`Payment retried successfully for ${row.customer}`, 'success');
+						onConfirm: async () => {
+							try {
+								await dispatch(retryPaymentThunk(row.id)).unwrap();
+								showToast(`Payment retried successfully for ${row.customer}`, 'success');
+							} catch (err: any) {
+								showToast(err?.message || `Payment retry failed for ${row.customer}`, 'error');
+							}
 							closeDialog();
 						},
 					}),
@@ -176,10 +187,14 @@ export function useSubscriptionActions() {
 			},
 			{
 				label: 'Early Renewal', icon: FastForward,
-				disabled: row.cycle === 'Lifetime' || row.status !== 'active',
-				onClick: () => openDialog(buildEarlyRenewalDialog(row, () => {
-					updateRow(row.id, { nextPayment: addBillingInterval(null, row.billing) });
-					showToast(`Payment renewed early for ${row.customer}`, 'success');
+				disabled: row.cycle === 'Lifetime' || !['active', 'trialing'].includes(row.status),
+				onClick: () => openDialog(buildEarlyRenewalDialog(row, async () => {
+					try {
+						await dispatch(earlyRenewSubscriptionThunk(row.id)).unwrap();
+						showToast(`Payment renewed early for ${row.customer}`, 'success');
+					} catch (err: any) {
+						showToast(err?.message || `Payment renewal failed for ${row.customer}`, 'error');
+					}
 					closeDialog();
 				})),
 			},
@@ -203,7 +218,7 @@ export function useSubscriptionActions() {
 			},
 			{
 				label: 'Send Card Update Email', icon: CreditCard,
-				disabled: !row.cardExpiring,
+				disabled: row.status === 'cancelled' || row.status === 'completed' || row.status === 'expired',
 				onClick: () => sendCardUpdateEmail(row),
 			},
 
@@ -248,7 +263,7 @@ export function useSubscriptionActions() {
 				} as ActionItem]
 				: []),
 
-			...(row.status === 'active'
+			...( (row.status === 'active' || row.status === 'trialing')
 				? [{ label: 'Pause Subscription', icon: PauseCircle, dividerBefore: true, onClick: () => setPauseRow(row) } as ActionItem]
 				: []),
 			...(row.status === 'paused'
@@ -258,9 +273,13 @@ export function useSubscriptionActions() {
 						danger: false, icon: CheckCircle, title: 'Resume Subscription?',
 						body: <span>Resume billing for {row.customer}? Their next payment of <strong>{row.amount}</strong> will be charged immediately and then on the regular cycle.</span>,
 						confirmLabel: 'Resume Subscription',
-						onConfirm: () => {
-							updateRow(row.id, { status: 'active', nextPayment: addBillingInterval(null, row.billing) });
-							showToast(`Subscription resumed for ${row.customer}`, 'success');
+						onConfirm: async () => {
+							try {
+								await dispatch(resumeSubscriptionThunk(row.id)).unwrap();
+								showToast(`Subscription resumed for ${row.customer}`, 'success');
+							} catch (err: any) {
+								showToast(err?.message || `Failed to resume subscription for ${row.customer}`, 'error');
+							}
 							closeDialog();
 						},
 					}),
@@ -484,9 +503,13 @@ export function useSubscriptionActions() {
 				<PauseDurationModal
 					row={pauseRow}
 					onClose={() => setPauseRow(null)}
-					onPause={(pauseEndDate) => {
-						updateRow(pauseRow.id, { status: 'paused', nextPayment: null, pauseEndDate });
-						showToast(`Subscription paused for ${pauseRow.customer}`, 'warning');
+					onPause={async (pauseEndDate) => {
+						try {
+							await dispatch(pauseSubscriptionThunk({ id: pauseRow.id, resumeAt: pauseEndDate })).unwrap();
+							showToast(`Subscription paused for ${pauseRow.customer}`, 'warning');
+						} catch (err: any) {
+							showToast(err?.message || `Failed to pause subscription for ${pauseRow.customer}`, 'error');
+						}
 					}}
 				/>
 			)}
@@ -546,6 +569,29 @@ export function useSubscriptionActions() {
 		</>
 	);
 
+	const openResumeModal = (row: SubscriptionRecord) => {
+		openDialog({
+			danger: false,
+			icon: CheckCircle,
+			title: 'Resume Subscription?',
+			body: (
+				<span>
+					Resume billing for {row.customer}? Their next payment of <strong>{row.amount}</strong> will be charged immediately and then on the regular cycle.
+				</span>
+			),
+			confirmLabel: 'Resume Subscription',
+			onConfirm: async () => {
+				try {
+					await dispatch(resumeSubscriptionThunk(row.id)).unwrap();
+					showToast(`Subscription resumed for ${row.customer}`, 'success');
+				} catch (err: any) {
+					showToast(err?.message || `Failed to resume subscription for ${row.customer}`, 'error');
+				}
+				closeDialog();
+			},
+		});
+	};
+
 	return {
 		rowActions,
 		openPaymentHistory,
@@ -556,6 +602,7 @@ export function useSubscriptionActions() {
 		// without hunting through the rowActions() array for a matching label.
 		openCancelFlow: setCancelRow,
 		openPauseModal: setPauseRow,
+		openResumeModal,
 		openChangePlan: setPlanRow,
 		showToast,
 		openDialog,

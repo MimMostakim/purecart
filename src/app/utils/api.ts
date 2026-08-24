@@ -280,12 +280,136 @@ export async function fetchSubscription(id: string): Promise<SubscriptionRecord 
 }
 
 /**
- * Generic patch used by every row-action mutation (pause/resume/cancel/skip/etc.)
- * while the dedicated endpoints below aren't wired to a real backend yet.
- * Once live, prefer calling the specific action endpoint for each mutation
- * (POST .../pause, .../cancel, etc. - see the backend dev plan §6) instead of
- * a generic patch, since the real endpoints run business logic (proration,
- * license sync, etc.) a raw field patch can't reproduce.
+ * POST /purecart/v1/subscriptions/{id}/early-renewal - early renewal triggered by customer or admin.
+ */
+export async function earlyRenewSubscription(id: string): Promise<SubscriptionRecord> {
+	if (USE_DUMMY_DATA) {
+		const sub = dummySubscriptions.find((r) => r.id === id);
+		if (!sub) throw new Error(`Subscription ${id} not found`);
+		const updated: SubscriptionRecord = {
+			...sub,
+			status: 'active',
+			nextPayment: addBillingInterval(null, sub.billing),
+			renewalCount: (sub.renewalCount || 0) + 1,
+		};
+		dummySubscriptions = dummySubscriptions.map((r) => (r.id === id ? updated : r));
+		return delay(updated, 200);
+	}
+	const numericId = parseInt(id.replace(/\D/g, ''), 10) || id;
+	const res = await apiFetch<any>(`/subscriptions/${numericId}/early-renewal`, {
+		method: 'POST',
+	});
+	return mapBackendSubscriptionToRecord(res);
+}
+
+/**
+ * POST /purecart/v1/subscriptions/{id}/renew - manual renewal triggered by admin.
+ */
+export async function renewSubscription(id: string): Promise<SubscriptionRecord> {
+	if (USE_DUMMY_DATA) {
+		return earlyRenewSubscription(id);
+	}
+	const numericId = parseInt(id.replace(/\D/g, ''), 10) || id;
+	const res = await apiFetch<any>(`/subscriptions/${numericId}/renew`, {
+		method: 'POST',
+	});
+	return mapBackendSubscriptionToRecord(res);
+}
+
+/**
+ * POST /purecart/v1/subscriptions/{id}/pause - pause an active subscription.
+ */
+export async function pauseSubscription(id: string, resumeAt?: string | null): Promise<SubscriptionRecord> {
+	if (USE_DUMMY_DATA) {
+		const sub = dummySubscriptions.find((r) => r.id === id);
+		if (!sub) throw new Error(`Subscription ${id} not found`);
+		const updated: SubscriptionRecord = { ...sub, status: 'paused', nextPayment: null, pauseEndDate: resumeAt ?? null };
+		dummySubscriptions = dummySubscriptions.map((r) => (r.id === id ? updated : r));
+		return delay(updated, 200);
+	}
+	const numericId = parseInt(id.replace(/\D/g, ''), 10) || id;
+	const res = await apiFetch<any>(`/subscriptions/${numericId}/pause`, {
+		method: 'POST',
+		body: JSON.stringify({ resume_at: resumeAt }),
+	});
+	return mapBackendSubscriptionToRecord(res);
+}
+
+/**
+ * POST /purecart/v1/subscriptions/{id}/resume - resume a paused subscription.
+ */
+export async function resumeSubscription(id: string): Promise<SubscriptionRecord> {
+	if (USE_DUMMY_DATA) {
+		const sub = dummySubscriptions.find((r) => r.id === id);
+		if (!sub) throw new Error(`Subscription ${id} not found`);
+		const updated: SubscriptionRecord = { ...sub, status: 'active', nextPayment: addBillingInterval(null, sub.billing), pauseEndDate: null };
+		dummySubscriptions = dummySubscriptions.map((r) => (r.id === id ? updated : r));
+		return delay(updated, 200);
+	}
+	const numericId = parseInt(id.replace(/\D/g, ''), 10) || id;
+	const res = await apiFetch<any>(`/subscriptions/${numericId}/resume`, {
+		method: 'POST',
+	});
+	return mapBackendSubscriptionToRecord(res);
+}
+
+/**
+ * POST /purecart/v1/subscriptions/{id}/cancel - cancel a subscription.
+ */
+export async function cancelSubscription(id: string, immediately: boolean = true, reason?: string | null): Promise<SubscriptionRecord> {
+	if (USE_DUMMY_DATA) {
+		const sub = dummySubscriptions.find((r) => r.id === id);
+		if (!sub) throw new Error(`Subscription ${id} not found`);
+		const updated: SubscriptionRecord = { ...sub, status: immediately ? 'cancelled' : 'pending_cancel' };
+		dummySubscriptions = dummySubscriptions.map((r) => (r.id === id ? updated : r));
+		return delay(updated, 200);
+	}
+	const numericId = parseInt(id.replace(/\D/g, ''), 10) || id;
+	const res = await apiFetch<any>(`/subscriptions/${numericId}/cancel`, {
+		method: 'POST',
+		body: JSON.stringify({ immediately, reason }),
+	});
+	return mapBackendSubscriptionToRecord(res);
+}
+
+/**
+ * POST /purecart/v1/subscriptions/{id}/skip - skip next renewal cycle.
+ */
+export async function skipSubscription(id: string): Promise<SubscriptionRecord> {
+	if (USE_DUMMY_DATA) {
+		const sub = dummySubscriptions.find((r) => r.id === id);
+		if (!sub) throw new Error(`Subscription ${id} not found`);
+		const updated: SubscriptionRecord = { ...sub, nextPayment: addBillingInterval(sub.nextPayment, sub.billing), skipCount: (sub.skipCount || 0) + 1 };
+		dummySubscriptions = dummySubscriptions.map((r) => (r.id === id ? updated : r));
+		return delay(updated, 200);
+	}
+	const numericId = parseInt(id.replace(/\D/g, ''), 10) || id;
+	const res = await apiFetch<any>(`/subscriptions/${numericId}/skip`, {
+		method: 'POST',
+	});
+	return mapBackendSubscriptionToRecord(res);
+}
+
+/**
+ * POST /purecart/v1/subscriptions/{id}/retry-payment - retry failed charge.
+ */
+export async function retryPaymentSubscription(id: string): Promise<SubscriptionRecord> {
+	if (USE_DUMMY_DATA) {
+		const sub = dummySubscriptions.find((r) => r.id === id);
+		if (!sub) throw new Error(`Subscription ${id} not found`);
+		const updated: SubscriptionRecord = { ...sub, status: 'active', nextPayment: addBillingInterval(null, sub.billing) };
+		dummySubscriptions = dummySubscriptions.map((r) => (r.id === id ? updated : r));
+		return delay(updated, 200);
+	}
+	const numericId = parseInt(id.replace(/\D/g, ''), 10) || id;
+	const res = await apiFetch<any>(`/subscriptions/${numericId}/retry-payment`, {
+		method: 'POST',
+	});
+	return mapBackendSubscriptionToRecord(res);
+}
+
+/**
+ * Generic patch used by row-action mutations. Routes to dedicated action endpoints when live.
  *
  * @since 1.0.0
  *
@@ -306,6 +430,21 @@ export async function updateSubscription(
 		if (!updated) throw new Error(`Subscription ${id} not found`);
 		return delay(updated, 200);
 	}
+
+	// Route to specific REST endpoint based on action
+	if (patch.status === 'paused') {
+		return pauseSubscription(id, patch.pauseEndDate);
+	}
+	if (patch.status === 'active') {
+		return resumeSubscription(id);
+	}
+	if (patch.status === 'cancelled' || patch.status === 'pending_cancel') {
+		return cancelSubscription(id, patch.status === 'cancelled');
+	}
+	if (patch.skipCount !== undefined) {
+		return skipSubscription(id);
+	}
+
 	const numericId = parseInt(id.replace(/\D/g, ''), 10) || id;
 	const backendPayload = mapRecordToBackendPatch(patch);
 	const res = await apiFetch<any>(`/subscriptions/${numericId}`, {

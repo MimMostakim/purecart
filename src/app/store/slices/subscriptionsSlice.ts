@@ -18,6 +18,11 @@ import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/tool
 import {
 	fetchSubscriptions,
 	updateSubscription as apiUpdateSubscription,
+	earlyRenewSubscription as apiEarlyRenewSubscription,
+	renewSubscription as apiRenewSubscription,
+	retryPaymentSubscription as apiRetryPaymentSubscription,
+	pauseSubscription as apiPauseSubscription,
+	resumeSubscription as apiResumeSubscription,
 } from '../../utils/api';
 import type { SubscriptionRecord } from '../../components/Subscriptions/types';
 
@@ -80,6 +85,56 @@ export const patchSubscription = createAsyncThunk(
 	'subscriptions/patch',
 	async ( { id, patch }: { id: string; patch: Partial< SubscriptionRecord > } ) => {
 		return await apiUpdateSubscription( id, patch );
+	}
+);
+
+/**
+ * Executes an early renewal via the API and updates the store with the active record.
+ */
+export const earlyRenewSubscriptionThunk = createAsyncThunk(
+	'subscriptions/earlyRenew',
+	async ( id: string ) => {
+		return await apiEarlyRenewSubscription( id );
+	}
+);
+
+/**
+ * Executes an admin renewal via the API and updates the store with the active record.
+ */
+export const renewSubscriptionThunk = createAsyncThunk(
+	'subscriptions/renew',
+	async ( id: string ) => {
+		return await apiRenewSubscription( id );
+	}
+);
+
+/**
+ * Retries payment on a past_due subscription.
+ */
+export const retryPaymentThunk = createAsyncThunk(
+	'subscriptions/retryPayment',
+	async ( id: string ) => {
+		return await apiRetryPaymentSubscription( id );
+	}
+);
+
+/**
+ * Pauses an active or trialing subscription.
+ */
+export const pauseSubscriptionThunk = createAsyncThunk(
+	'subscriptions/pause',
+	async ( { id, resumeAt }: { id: string; resumeAt?: string | null } ) => {
+		return await apiPauseSubscription( id, resumeAt );
+	}
+);
+
+/**
+ * Resumes a paused subscription.
+ */
+export const resumeSubscriptionThunk = createAsyncThunk(
+	'subscriptions/resume',
+	async ( id: string ) => {
+		return await apiResumeSubscription( id );
 	}
 );
 
@@ -150,6 +205,26 @@ const subscriptionsSlice = createSlice( {
 				state.error = action.error.message ?? 'Failed to load subscriptions';
 			} )
 			.addCase( patchSubscription.fulfilled, ( state, action ) => {
+				const updated = action.payload;
+				state.items = state.items.map( ( r ) => ( r.id === updated.id ? updated : r ) );
+			} )
+			.addCase( earlyRenewSubscriptionThunk.fulfilled, ( state, action ) => {
+				const updated = action.payload;
+				state.items = state.items.map( ( r ) => ( r.id === updated.id ? updated : r ) );
+			} )
+			.addCase( renewSubscriptionThunk.fulfilled, ( state, action ) => {
+				const updated = action.payload;
+				state.items = state.items.map( ( r ) => ( r.id === updated.id ? updated : r ) );
+			} )
+			.addCase( retryPaymentThunk.fulfilled, ( state, action ) => {
+				const updated = action.payload;
+				state.items = state.items.map( ( r ) => ( r.id === updated.id ? updated : r ) );
+			} )
+			.addCase( pauseSubscriptionThunk.fulfilled, ( state, action ) => {
+				const updated = action.payload;
+				state.items = state.items.map( ( r ) => ( r.id === updated.id ? updated : r ) );
+			} )
+			.addCase( resumeSubscriptionThunk.fulfilled, ( state, action ) => {
 				const updated = action.payload;
 				state.items = state.items.map( ( r ) => ( r.id === updated.id ? updated : r ) );
 			} );
