@@ -162,6 +162,7 @@ export interface SubscriptionRecord {
 	pendingSwitchProduct: string | null;
 	pendingSwitchType: 'upgrade' | 'downgrade' | null;
 	retentionDiscountRemaining: number; // cycles of an active retention discount remaining, 0 = none
+	discountPercent: number | null; // active retention/promotional discount percentage, null = none
 
 	// Payment health
 	cardExpiryDate: string | null; // 'MM/YYYY'

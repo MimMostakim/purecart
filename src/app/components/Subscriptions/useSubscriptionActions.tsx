@@ -50,6 +50,9 @@ import {
 	retryPaymentThunk,
 	pauseSubscriptionThunk,
 	resumeSubscriptionThunk,
+	cancelSubscriptionThunk,
+	acceptCancellationOfferThunk,
+	skipSubscriptionThunk,
 } from '../../store/slices/subscriptionsSlice';
 import { ConfirmDialog, Toast } from '../ui';
 import type { ActionItem, ConfirmDialogProps, ToastProps } from '../ui';
@@ -201,9 +204,13 @@ export function useSubscriptionActions() {
 			{
 				label: 'Skip Next Cycle', icon: SkipForward,
 				disabled: row.paymentType !== 'recurring' || row.status !== 'active',
-				onClick: () => openDialog(buildSkipCycleDialog(row, () => {
-					updateRow(row.id, { nextPayment: addBillingInterval(row.nextPayment, row.billing), skipCount: row.skipCount + 1 });
-					showToast(`Next cycle skipped for ${row.customer}`, 'warning');
+				onClick: () => openDialog(buildSkipCycleDialog(row, async () => {
+					try {
+						await dispatch(skipSubscriptionThunk(row.id)).unwrap();
+						showToast(`Next cycle skipped for ${row.customer}`, 'warning');
+					} catch (err: any) {
+						showToast(err?.message || `Failed to skip next cycle for ${row.customer}`, 'error');
+					}
 					closeDialog();
 				})),
 			},
@@ -293,9 +300,13 @@ export function useSubscriptionActions() {
 							danger: true, icon: XCircle, title: 'Cancel Immediately?',
 							body: <span>Cancel <strong>{row.product}</strong> for {row.customer} right now instead of waiting until {row.cancellationDate}? Access ends immediately.</span>,
 							confirmLabel: 'Cancel Now',
-							onConfirm: () => {
-								updateRow(row.id, { status: 'cancelled', cancellationDate: new Date().toISOString().slice(0, 10) });
-								showToast(`Subscription cancelled for ${row.customer}`, 'error');
+							onConfirm: async () => {
+								try {
+									await dispatch(cancelSubscriptionThunk({ id: row.id, immediately: true })).unwrap();
+									showToast(`Subscription cancelled for ${row.customer}`, 'error');
+								} catch (err: any) {
+									showToast(err?.message || `Failed to cancel subscription for ${row.customer}`, 'error');
+								}
 								closeDialog();
 							},
 						}),
@@ -487,16 +498,36 @@ export function useSubscriptionActions() {
 				<CancellationFlowModal
 					row={cancelRow}
 					onClose={() => setCancelRow(null)}
-					onCancelled={(patch) => {
-						updateRow(cancelRow.id, patch);
-						showToast(
-							patch.status === 'cancelled'
-								? `Subscription cancelled for ${cancelRow.customer}`
-								: `${cancelRow.customer}'s subscription will cancel on ${patch.cancellationDate}`,
-							'error'
-						);
+					onCancelled={async (patch) => {
+						try {
+							const immediately = patch.status === 'cancelled';
+							await dispatch(cancelSubscriptionThunk({
+								id: cancelRow.id,
+								immediately,
+								reason: patch.cancellationReasonId,
+							})).unwrap();
+							showToast(
+								immediately
+									? `Subscription cancelled for ${cancelRow.customer}`
+									: `${cancelRow.customer}'s subscription will cancel on ${patch.cancellationDate || 'period end'}`,
+								'error'
+							);
+						} catch (err: any) {
+							showToast(err?.message || `Failed to cancel subscription for ${cancelRow.customer}`, 'error');
+						}
 					}}
-					onOfferAccepted={(offer) => handleOfferAccepted(cancelRow, offer)}
+					onOfferAccepted={async (offer, reasonId) => {
+						try {
+							await dispatch(acceptCancellationOfferThunk({
+								id: cancelRow.id,
+								offerType: offer.type,
+								reason: reasonId || 'too_expensive',
+							})).unwrap();
+							showToast(`Retention offer applied for ${cancelRow.customer}`, 'success');
+						} catch (err: any) {
+							showToast(err?.message || `Failed to apply retention offer for ${cancelRow.customer}`, 'error');
+						}
+					}}
 				/>
 			)}
 			{pauseRow && (

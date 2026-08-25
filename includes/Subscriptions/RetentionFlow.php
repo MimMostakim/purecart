@@ -318,6 +318,13 @@ class RetentionFlow {
 		}
 
 		if ( ! $offer ) {
+			$definitions = $this->get_offer_definitions();
+			if ( isset( $definitions[ $offer_type ] ) ) {
+				$offer = $definitions[ $offer_type ];
+			}
+		}
+
+		if ( ! $offer ) {
 			return new \WP_Error( 'purecart_offer_not_eligible', __( 'This offer is not available for this subscription.', 'purecart' ) );
 		}
 

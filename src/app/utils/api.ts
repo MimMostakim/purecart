@@ -373,6 +373,52 @@ export async function cancelSubscription(id: string, immediately: boolean = true
 }
 
 /**
+ * GET /purecart/v1/subscriptions/{id}/cancellation/reasons
+ */
+export async function fetchCancellationReasons(id?: string): Promise<Record<string, string>> {
+	if (USE_DUMMY_DATA) {
+		return delay({
+			too_expensive: 'Too expensive',
+			not_using: 'Not using it',
+			missing_features: 'Missing features',
+			switching: 'Switching provider',
+			pausing: 'Pausing use for now',
+			other: 'Other',
+		});
+	}
+	const numericId = id ? parseInt(id.replace(/\D/g, ''), 10) || 1 : 1;
+	return apiFetch<Record<string, string>>(`/subscriptions/${numericId}/cancellation/reasons`);
+}
+
+/**
+ * GET /purecart/v1/subscriptions/{id}/cancellation/offers?reason=...
+ */
+export async function fetchCancellationOffers(id: string, reason: string): Promise<any[]> {
+	if (USE_DUMMY_DATA) {
+		return delay([]);
+	}
+	const numericId = parseInt(id.replace(/\D/g, ''), 10) || id;
+	return apiFetch<any[]>(`/subscriptions/${numericId}/cancellation/offers?reason=${encodeURIComponent(reason)}`);
+}
+
+/**
+ * POST /purecart/v1/subscriptions/{id}/cancellation/accept-offer
+ */
+export async function acceptCancellationOffer(id: string, offerType: string, reason: string): Promise<SubscriptionRecord> {
+	if (USE_DUMMY_DATA) {
+		const sub = dummySubscriptions.find((r) => r.id === id);
+		if (!sub) throw new Error(`Subscription ${id} not found`);
+		return delay(sub, 200);
+	}
+	const numericId = parseInt(id.replace(/\D/g, ''), 10) || id;
+	const res = await apiFetch<any>(`/subscriptions/${numericId}/cancellation/accept-offer`, {
+		method: 'POST',
+		body: JSON.stringify({ offer_type: offerType, reason }),
+	});
+	return mapBackendSubscriptionToRecord(res);
+}
+
+/**
  * POST /purecart/v1/subscriptions/{id}/skip - skip next renewal cycle.
  */
 export async function skipSubscription(id: string): Promise<SubscriptionRecord> {

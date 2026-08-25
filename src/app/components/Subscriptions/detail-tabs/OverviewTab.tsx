@@ -46,10 +46,41 @@ export function OverviewTab({ row, onSendCardUpdate }: OverviewTabProps) {
 					<div className="text-sm font-semibold mb-2" style={{ color: M3.onSurface, fontFamily: 'Roboto, sans-serif' }}>
 						Billing Summary
 					</div>
-					<SummaryRow label="Amount" value={<span style={{ fontFamily: 'Roboto Mono, monospace' }}>{row.amount}</span>} />
+					<SummaryRow
+						label="Regular Plan Price"
+						value={<span style={{ fontFamily: 'Roboto Mono, monospace' }}>{row.amount}</span>}
+					/>
+					{row.discountPercent && row.retentionDiscountRemaining > 0 ? (
+						<>
+							<SummaryRow
+								label="Active Discount"
+								value={
+									<span
+										className="text-xs px-2.5 py-1 rounded-full font-medium inline-flex items-center gap-1"
+										style={{ backgroundColor: '#DCFCE7', color: '#15803D' }}
+									>
+										🏷️ {row.discountPercent}% off for next {row.retentionDiscountRemaining} renewal{row.retentionDiscountRemaining > 1 ? 's' : ''}
+									</span>
+								}
+							/>
+							<SummaryRow
+								label="Next Charge Due"
+								value={
+									<div className="flex items-center gap-2 flex-wrap">
+										<span className="font-bold text-base" style={{ color: '#16A34A', fontFamily: 'Roboto Mono, monospace' }}>
+											${(row.amountRaw * (1 - row.discountPercent / 100)).toFixed(2)} / {row.billing?.period === 'year' ? 'yr' : 'mo'}
+										</span>
+										<span className="text-xs text-gray-400 line-through">
+											${row.amountRaw.toFixed(2)}
+										</span>
+									</div>
+								}
+							/>
+						</>
+					) : null}
 					<SummaryRow label="Cycle" value={row.billing?.displayLabel ?? ''} />
 					<SummaryRow
-						label="Next payment"
+						label="Next payment date"
 						value={
 							row.status === 'past_due'
 								? <span style={{ color: M3.error }}>⚠ {row.nextPayment}</span>

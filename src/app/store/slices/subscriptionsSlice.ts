@@ -23,6 +23,9 @@ import {
 	retryPaymentSubscription as apiRetryPaymentSubscription,
 	pauseSubscription as apiPauseSubscription,
 	resumeSubscription as apiResumeSubscription,
+	cancelSubscription as apiCancelSubscription,
+	acceptCancellationOffer as apiAcceptCancellationOffer,
+	skipSubscription as apiSkipSubscription,
 } from '../../utils/api';
 import type { SubscriptionRecord } from '../../components/Subscriptions/types';
 
@@ -138,6 +141,36 @@ export const resumeSubscriptionThunk = createAsyncThunk(
 	}
 );
 
+/**
+ * Cancels a subscription immediately or at the end of the billing period.
+ */
+export const cancelSubscriptionThunk = createAsyncThunk(
+	'subscriptions/cancel',
+	async ( { id, immediately = true, reason }: { id: string; immediately?: boolean; reason?: string | null } ) => {
+		return await apiCancelSubscription( id, immediately, reason );
+	}
+);
+
+/**
+ * Accepts a retention offer (discount, pause, skip, downgrade).
+ */
+export const acceptCancellationOfferThunk = createAsyncThunk(
+	'subscriptions/acceptOffer',
+	async ( { id, offerType, reason }: { id: string; offerType: string; reason: string } ) => {
+		return await apiAcceptCancellationOffer( id, offerType, reason );
+	}
+);
+
+/**
+ * Skips the next renewal cycle.
+ */
+export const skipSubscriptionThunk = createAsyncThunk(
+	'subscriptions/skip',
+	async ( id: string ) => {
+		return await apiSkipSubscription( id );
+	}
+);
+
 const subscriptionsSlice = createSlice( {
 	name: 'subscriptions',
 	initialState,
@@ -225,6 +258,18 @@ const subscriptionsSlice = createSlice( {
 				state.items = state.items.map( ( r ) => ( r.id === updated.id ? updated : r ) );
 			} )
 			.addCase( resumeSubscriptionThunk.fulfilled, ( state, action ) => {
+				const updated = action.payload;
+				state.items = state.items.map( ( r ) => ( r.id === updated.id ? updated : r ) );
+			} )
+			.addCase( cancelSubscriptionThunk.fulfilled, ( state, action ) => {
+				const updated = action.payload;
+				state.items = state.items.map( ( r ) => ( r.id === updated.id ? updated : r ) );
+			} )
+			.addCase( acceptCancellationOfferThunk.fulfilled, ( state, action ) => {
+				const updated = action.payload;
+				state.items = state.items.map( ( r ) => ( r.id === updated.id ? updated : r ) );
+			} )
+			.addCase( skipSubscriptionThunk.fulfilled, ( state, action ) => {
 				const updated = action.payload;
 				state.items = state.items.map( ( r ) => ( r.id === updated.id ? updated : r ) );
 			} );

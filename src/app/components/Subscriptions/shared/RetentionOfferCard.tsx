@@ -103,12 +103,20 @@ export function RetentionOfferCard( {
 			</div>
 
 			{ offer.type === 'discount' && offer.discountPct !== undefined && (
-				<div
-					className="text-sm"
-					style={ { fontFamily: 'Roboto Mono, monospace', color: M3.onPrimaryContainer } }
-				>
-					{ currentAmount } → { discountedAmount( currentAmount, offer.discountPct ) }
-					{ offer.discountDuration && ` for ${ offer.discountDuration }` }
+				<div className="flex flex-col gap-1 rounded-xl p-3" style={ { backgroundColor: 'rgba(255, 255, 255, 0.7)' } }>
+					<div
+						className="text-sm font-semibold flex items-center gap-2"
+						style={ { fontFamily: 'Roboto Mono, monospace', color: M3.onPrimaryContainer } }
+					>
+						<span className="line-through text-gray-500">{ currentAmount }</span>
+						<span className="text-emerald-700 font-bold">{ discountedAmount( currentAmount, offer.discountPct ) }</span>
+						<span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-sans font-medium">
+							{ offer.discountPct }% OFF
+						</span>
+					</div>
+					<div className="text-xs text-gray-700" style={ { fontFamily: 'Roboto, sans-serif' } }>
+						Applies to your next { offer.discountDuration ?? '3 billing cycles' }. Automatically renews at the regular { currentAmount } price afterwards.
+					</div>
 				</div>
 			) }
 			{ offer.type === 'pause' && offer.pauseDuration !== undefined && (

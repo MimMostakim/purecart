@@ -267,7 +267,7 @@ class Subscriptions extends PureCartApi {
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'get_cancellation_offers' ),
-				'permission_callback' => array( $this, 'permission_owner_only' ),
+				'permission_callback' => array( $this, 'permission_owner_or_admin' ),
 			)
 		);
 
@@ -277,7 +277,7 @@ class Subscriptions extends PureCartApi {
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'accept_cancellation_offer' ),
-				'permission_callback' => array( $this, 'permission_owner_only' ),
+				'permission_callback' => array( $this, 'permission_owner_or_admin' ),
 			)
 		);
 

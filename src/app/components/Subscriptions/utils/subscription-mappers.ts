@@ -378,6 +378,7 @@ export function mapBackendSubscriptionToRecord( raw: any ): SubscriptionRecord {
 		pendingSwitchProduct: raw.pendingSwitchProduct ?? ( raw.pending_switch_product ? String( raw.pending_switch_product) : null ),
 		pendingSwitchType: raw.pendingSwitchType ?? raw.pending_switch_type ?? null,
 		retentionDiscountRemaining: Number( raw.retentionDiscountRemaining ?? raw.discount_renewals_remaining ?? 0 ),
+		discountPercent: raw.discountPercent !== undefined ? raw.discountPercent : ( raw.discount_percent !== undefined ? ( raw.discount_percent === null ? null : Number( raw.discount_percent ) ) : null ),
 		cardExpiryDate: raw.cardExpiryDate ?? raw.card_expiry_date ?? null,
 		cardExpiring: Boolean( raw.cardExpiring ?? raw.card_expiring ?? false ),
 		stepPrice: raw.stepPrice !== undefined ? raw.stepPrice : ( raw.step_price !== undefined ? ( raw.step_price === null ? null : Number( raw.step_price ) ) : null ),

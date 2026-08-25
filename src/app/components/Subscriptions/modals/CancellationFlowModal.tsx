@@ -24,7 +24,7 @@ interface CancellationFlowModalProps {
 	row: SubscriptionRecord;
 	onClose: () => void;
 	onCancelled: ( patch: Partial< SubscriptionRecord > ) => void;
-	onOfferAccepted: ( offer: RetentionOffer ) => void;
+	onOfferAccepted: ( offer: RetentionOffer, reasonId: string ) => void;
 }
 
 /**
@@ -54,9 +54,17 @@ export function CancellationFlowModal( {
 		else if ( step === 1 ) setStep( 2 );
 	};
 
+	const goBack = () => {
+		if ( step === 2 ) {
+			setStep( selectedReason?.offer ? 1 : 0 );
+		} else if ( step === 1 ) {
+			setStep( 0 );
+		}
+	};
+
 	const handleAcceptOffer = () => {
 		if ( ! selectedReason?.offer ) return;
-		onOfferAccepted( selectedReason.offer );
+		onOfferAccepted( selectedReason.offer, selectedReasonId ?? 'too_expensive' );
 		onClose();
 	};
 
@@ -145,13 +153,20 @@ export function CancellationFlowModal( {
 								Before you go…
 							</div>
 						</div>
-						<div className="px-6 pb-6">
+						<div className="px-6 pb-4">
 							<RetentionOfferCard
 								offer={ selectedReason.offer }
 								currentAmount={ row.amount }
 								onAccept={ handleAcceptOffer }
 								onDecline={ goNext }
 							/>
+						</div>
+						<div
+							className="flex items-center justify-between gap-2 px-6 py-4"
+							style={ { borderTop: `1px solid ${ M3.outlineVariant }` } }
+						>
+							<TextButton onClick={ goBack }>← Back</TextButton>
+							<TextButton onClick={ onClose }>Keep Subscription</TextButton>
 						</div>
 					</>
 				) }
@@ -227,13 +242,16 @@ export function CancellationFlowModal( {
 							</button>
 						</div>
 						<div
-							className="flex items-center justify-end gap-2 px-6 py-4"
+							className="flex items-center justify-between gap-2 px-6 py-4"
 							style={ { borderTop: `1px solid ${ M3.outlineVariant }` } }
 						>
-							<TextButton onClick={ onClose }>Keep Subscription</TextButton>
-							<FilledButton danger small onClick={ handleCancel }>
-								<XCircle size={ 14 } /> Cancel Subscription
-							</FilledButton>
+							<TextButton onClick={ goBack }>← Back</TextButton>
+							<div className="flex items-center gap-2">
+								<TextButton onClick={ onClose }>Keep Subscription</TextButton>
+								<FilledButton danger small onClick={ handleCancel }>
+									<XCircle size={ 14 } /> Cancel Subscription
+								</FilledButton>
+							</div>
 						</div>
 					</>
 				) }

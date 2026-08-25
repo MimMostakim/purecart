@@ -292,7 +292,26 @@ export function SubscriptionsTable({
 										className="px-3 py-3 text-sm font-medium"
 										style={{ color: M3.onSurface, fontFamily: 'Roboto Mono, monospace' }}
 									>
-										{row.amount}
+										{row.discountPercent && row.retentionDiscountRemaining > 0 ? (
+											<div className="flex flex-col gap-0.5">
+												<div className="flex items-center gap-1.5 flex-wrap">
+													<span className="font-semibold" style={{ color: '#16A34A' }}>
+														${(row.amountRaw * (1 - row.discountPercent / 100)).toFixed(2)}/{row.billing?.period === 'year' ? 'yr' : 'mo'}
+													</span>
+													<span className="text-xs text-gray-400 line-through">
+														${row.amountRaw.toFixed(2)}
+													</span>
+												</div>
+												<span
+													className="text-[11px] font-sans font-medium"
+													style={{ color: '#15803D' }}
+												>
+													{row.discountPercent}% off (next {row.retentionDiscountRemaining} renewal{row.retentionDiscountRemaining > 1 ? 's' : ''})
+												</span>
+											</div>
+										) : (
+											<span>{row.amount}</span>
+										)}
 									</td>
 									<td className="px-3 py-3">
 										{row.paymentType === 'split' && row.maxPayments !== null ? (
