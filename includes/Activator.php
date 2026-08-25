@@ -11,6 +11,7 @@ namespace PureCart;
 
 use PureCart\Store\Licenses;
 use PureCart\Store\LicenseActivations;
+use PureCart\Store\LicenseTokens;
 use PureCart\Store\Downloads;
 use PureCart\Store\DownloadLogs;
 use PureCart\Store\ProductVersions;
@@ -36,7 +37,7 @@ class Activator {
 	private const DB_VERSION_KEY = 'purecart_db_version';
 
 	/** Current DB schema version. */
-	private const DB_VERSION = '1.2.4';
+	private const DB_VERSION = '1.2.5';
 
 	/** Action Scheduler group for all plugin jobs. */
 	private const AS_GROUP = 'purecart';
@@ -64,6 +65,7 @@ class Activator {
 		as_unschedule_all_actions( 'purecart_check_expired_licenses', array(), self::AS_GROUP );
 		as_unschedule_all_actions( 'purecart_process_dunning', array(), self::AS_GROUP );
 		as_unschedule_all_actions( 'purecart_scan_due_renewals', array(), self::AS_GROUP );
+		as_unschedule_all_actions( 'purecart_cleanup_expired_tokens', array(), self::AS_GROUP );
 		flush_rewrite_rules();
 	}
 
@@ -78,6 +80,7 @@ class Activator {
 	public static function create_tables(): void {
 		( new Licenses() )->create();
 		( new LicenseActivations() )->create();
+		( new LicenseTokens() )->create();
 		( new Downloads() )->create();
 		( new DownloadLogs() )->create();
 		( new ProductVersions() )->create();
@@ -111,6 +114,16 @@ class Activator {
 				time(),
 				12 * HOUR_IN_SECONDS,
 				'purecart_process_dunning',
+				array(),
+				self::AS_GROUP
+			);
+		}
+
+		if ( false === as_next_scheduled_action( 'purecart_cleanup_expired_tokens', array(), self::AS_GROUP ) ) {
+			as_schedule_recurring_action(
+				time(),
+				DAY_IN_SECONDS,
+				'purecart_cleanup_expired_tokens',
 				array(),
 				self::AS_GROUP
 			);
