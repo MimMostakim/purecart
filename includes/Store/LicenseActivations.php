@@ -32,6 +32,7 @@ class LicenseActivations extends PureCartStore {
             domain       VARCHAR(255) NOT NULL DEFAULT '',
             ip_address   VARCHAR(45)  NOT NULL DEFAULT '',
             environment  ENUM('production','staging','local') NOT NULL DEFAULT 'production',
+            reported_version VARCHAR(32) NOT NULL DEFAULT '',
             activated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             last_check   DATETIME NULL DEFAULT NULL,
             PRIMARY KEY  (id),

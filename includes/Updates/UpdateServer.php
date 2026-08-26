@@ -40,6 +40,9 @@ class UpdateServer {
 	/** @var UpdateDelivery */
 	private UpdateDelivery $delivery;
 
+	/** @var AdoptionRepository */
+	private AdoptionRepository $adoption;
+
 	/**
 	 * @since 1.0.0
 	 * @param UpdateDelivery|null $delivery Shared delivery instance; a new one is built when omitted.
@@ -49,6 +52,7 @@ class UpdateServer {
 		$this->locator      = new ProductLocator();
 		$this->license_gate = new LicenseGate();
 		$this->channels     = new UpdateChannelRouter();
+		$this->adoption     = new AdoptionRepository();
 
 		// UpdateDelivery registers rewrite/template hooks in its constructor,
 		// so the module's single instance is passed in rather than a second
@@ -90,6 +94,15 @@ class UpdateServer {
 			}
 
 			$license_id = (int) $license->id;
+
+			// Note what this site says it is running, for adoption reporting.
+			// Best-effort and never fatal: telemetry must not be able to fail
+			// an update check that is otherwise perfectly valid.
+			$this->adoption->record(
+				$license_id,
+				( new LicenseGate() )->normalize_domain( (string) ( $params['domain'] ?? '' ) ),
+				(string) ( $params['version'] ?? '' )
+			);
 		}
 
 		$channel  = $this->channels->resolve( $product_id, $license_id, isset( $params['channel'] ) ? (string) $params['channel'] : null );

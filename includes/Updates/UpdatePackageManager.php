@@ -191,6 +191,18 @@ class UpdatePackageManager {
 			);
 		}
 
+		// Compatibility headers: an explicit form value always wins, but a
+		// blank one falls back to what the package itself declares rather
+		// than shipping empty and letting WordPress assume the update is
+		// safe to install anywhere.
+		$zip_headers = $this->extract_headers_from_zip( $source_path );
+
+		foreach ( array( 'requires_wp', 'tested_wp', 'requires_php' ) as $header ) {
+			if ( '' === trim( (string) ( $args[ $header ] ?? '' ) ) && '' !== $zip_headers[ $header ] ) {
+				$args[ $header ] = $zip_headers[ $header ];
+			}
+		}
+
 		$platform = isset( $args['platform'] ) && '' !== $args['platform'] ? sanitize_text_field( (string) $args['platform'] ) : 'all';
 		$channel  = isset( $args['channel'] ) && in_array( $args['channel'], PackageRepository::CHANNELS, true ) ? (string) $args['channel'] : 'stable';
 
@@ -440,6 +452,89 @@ class UpdatePackageManager {
 		$zip->close();
 
 		return $version;
+	}
+
+
+	/**
+	 * Read the WordPress compatibility headers out of a plugin/theme ZIP.
+	 *
+	 * Added after live testing showed these arriving empty: a ZIP whose
+	 * readme.txt already declared all three still produced `requires: ""`,
+	 * because only the version was being parsed.
+	 *
+	 * That is not cosmetic. WordPress uses `requires` and `requires_php` to
+	 * decide whether a site may install an update at all; left blank it assumes
+	 * compatibility, so a PHP 8.0-only release installs onto a PHP 7.4 site and
+	 * fatals it. Re-typing values that already live inside the package also
+	 * invites the form and the readme to drift apart.
+	 *
+	 * @since 1.0.0
+	 * @param string $zip_path Absolute path to the ZIP.
+	 * @return array<string, string> Keys: requires_wp, tested_wp, requires_php.
+	 */
+	public function extract_headers_from_zip( string $zip_path ): array {
+		$headers = array(
+			'requires_wp'  => '',
+			'tested_wp'    => '',
+			'requires_php' => '',
+		);
+
+		if ( ! class_exists( '\ZipArchive' ) || 'zip' !== strtolower( (string) pathinfo( $zip_path, PATHINFO_EXTENSION ) ) ) {
+			return $headers;
+		}
+
+		$zip = new \ZipArchive();
+		if ( true !== $zip->open( $zip_path ) ) {
+			return $headers;
+		}
+
+		// readme.txt spells them one way, a plugin/theme file header another;
+		// both are matched so a theme carrying only style.css still resolves.
+		$patterns = array(
+			'requires_wp'  => '/^[ \t\/*#@]*(?:Requires at least|Requires WP):\s*(.+)$/im',
+			'tested_wp'    => '/^[ \t\/*#@]*Tested up to:\s*(.+)$/im',
+			'requires_php' => '/^[ \t\/*#@]*Requires PHP:\s*(.+)$/im',
+		);
+
+		for ( $i = 0; $i < $zip->numFiles; $i++ ) {
+			$name = (string) $zip->getNameIndex( $i );
+			$base = strtolower( basename( $name ) );
+
+			// Same depth limit as extract_version_from_zip(): a bundled
+			// dependency's own headers must not be read as the product's.
+			if ( substr_count( trim( $name, '/' ), '/' ) > 1 ) {
+				continue;
+			}
+
+			if ( 'readme.txt' !== $base && 'style.css' !== $base && '.php' !== substr( $base, -4 ) ) {
+				continue;
+			}
+
+			$contents = (string) $zip->getFromIndex( $i );
+
+			foreach ( $patterns as $key => $pattern ) {
+				if ( '' === $headers[ $key ] && preg_match( $pattern, $contents, $m ) ) {
+					$headers[ $key ] = $this->clean_requirement( $m[1] );
+				}
+			}
+		}
+
+		$zip->close();
+
+		return $headers;
+	}
+
+	/**
+	 * Normalise a version-requirement value, rejecting anything that isn't one.
+	 *
+	 * @since 1.0.0
+	 * @param string $value Raw header value.
+	 * @return string
+	 */
+	private function clean_requirement( string $value ): string {
+		$value = trim( $value );
+
+		return preg_match( '/^\d[0-9.]*$/', $value ) ? substr( $value, 0, 10 ) : '';
 	}
 
 	/**

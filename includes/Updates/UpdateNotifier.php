@@ -183,6 +183,19 @@ class UpdateNotifier {
 			return;
 		}
 
+		// Force WooCommerce to build its email objects before firing the
+		// per-customer action. Each WC_Email subclass registers its own
+		// listener from its constructor, and those constructors only run when
+		// WC_Emails is first instantiated. A web request usually triggers that
+		// somewhere along the way, but an Action Scheduler job runs in a bare
+		// context where nothing has: the action would fire, no listener would
+		// be attached, and every notification would vanish with no error and
+		// nothing in the log. Verified against this install — before the call
+		// has_action() is false, after it is true.
+		if ( function_exists( 'WC' ) ) {
+			WC()->mailer();
+		}
+
 		foreach ( (array) $user_ids as $user_id ) {
 			/**
 			 * Fires once per customer who should hear about a new version.

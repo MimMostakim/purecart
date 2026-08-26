@@ -13,6 +13,7 @@ use PureCart\Updates\ChangelogManager;
 use PureCart\Updates\ProductLocator;
 use PureCart\Updates\UpdateDelivery;
 use PureCart\Updates\UpdateInfo;
+use PureCart\Updates\UpdateReport;
 use PureCart\Updates\UpdateServer;
 
 defined( 'ABSPATH' ) || exit;
@@ -41,6 +42,9 @@ class Updates extends PureCartApi {
 	/** @var ProductLocator */
 	private ProductLocator $locator;
 
+	/** @var UpdateReport */
+	private UpdateReport $report;
+
 	/**
 	 * @since 1.0.0
 	 * @param UpdateDelivery|null $delivery Shared delivery instance from the module bootstrap.
@@ -50,6 +54,7 @@ class Updates extends PureCartApi {
 		$this->info      = new UpdateInfo();
 		$this->changelog = new ChangelogManager();
 		$this->locator   = new ProductLocator();
+		$this->report    = new UpdateReport();
 	}
 
 	/**
@@ -110,7 +115,68 @@ class Updates extends PureCartApi {
 				),
 			)
 		);
+
+		// Admin reporting. Unlike the three customer endpoints above, these
+		// describe every product in the catalogue at once, so they are gated on
+		// manage_woocommerce rather than on a licence key.
+		register_rest_route(
+			PURECART_API_NAMESPACE,
+			'/updates/products',
+			array(
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'admin_products' ),
+				'permission_callback' => array( $this, 'permission_admin' ),
+			)
+		);
+
+		register_rest_route(
+			PURECART_API_NAMESPACE,
+			'/updates/products/(?P<product_id>\d+)',
+			array(
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'admin_product' ),
+				'permission_callback' => array( $this, 'permission_admin' ),
+			)
+		);
 	}
+
+	/**
+	 * @since 1.0.0
+	 * @return bool
+	 */
+	public function permission_admin(): bool {
+		return current_user_can( 'manage_woocommerce' );
+	}
+
+	/**
+	 * GET /updates/products — every update-enabled product.
+	 *
+	 * @since 1.0.0
+	 * @return \WP_REST_Response
+	 */
+	public function admin_products(): \WP_REST_Response {
+		return rest_ensure_response( $this->report->products() );
+	}
+
+	/**
+	 * GET /updates/products/{id} — one product's versions and adoption.
+	 *
+	 * @since 1.0.0
+	 * @param \WP_REST_Request $request REST request.
+	 * @return \WP_REST_Response
+	 */
+	public function admin_product( \WP_REST_Request $request ): \WP_REST_Response {
+		$product_id = (int) $request->get_param( 'product_id' );
+
+		return rest_ensure_response(
+			array(
+				'summary'  => $this->report->product_summary( $product_id ),
+				'versions' => $this->report->versions( $product_id ),
+				'adoption' => $this->report->adoption( $product_id ),
+			)
+		);
+	}
+
 
 	/**
 	 * GET /plugin/info

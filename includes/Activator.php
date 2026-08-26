@@ -36,7 +36,7 @@ class Activator {
 	private const DB_VERSION_KEY = 'purecart_db_version';
 
 	/** Current DB schema version. 1.3.0 — Updates module columns on purecart_product_versions. */
-	private const DB_VERSION = '1.3.0';
+	private const DB_VERSION = '1.3.1';
 
 	/** Action Scheduler group for all plugin jobs. */
 	private const AS_GROUP = 'purecart';

@@ -120,6 +120,16 @@ class SubscriptionEmail {
 	 * @return void
 	 */
 	public function send_reminders(): void {
+		// Build WooCommerce's email objects before any reminder hook fires.
+		// Every WC_Email subclass attaches its listener from its own
+		// constructor, and those run only when WC_Emails is instantiated.
+		// These scans execute from an Action Scheduler job, where nothing
+		// has done that — so without this the reminder actions fire into an
+		// empty hook and every reminder is lost silently, with no error and
+		// nothing logged. Found while testing the Updates module's
+		// notifier, which had the identical problem.
+		$this->ensure_mailer();
+
 		$this->send_renewal_reminders();
 		$this->send_trial_ending_reminders();
 		$this->send_card_expiry_warnings();
@@ -223,6 +233,8 @@ class SubscriptionEmail {
 	 * @return void
 	 */
 	public function send_grace_reminders(): void {
+		$this->ensure_mailer();
+
 		$grace_days    = (int) Settings::get( OptionKeys::SUB_SUSPENDED_GRACE_DAYS, 7 );
 		$warn_days_out = 2;
 
@@ -237,6 +249,19 @@ class SubscriptionEmail {
 			if ( $remaining_days > 0 && $remaining_days <= $warn_days_out ) {
 				$this->maybe_send( (int) $subscription->id, "suspended_grace_ending:{$subscription->suspended_at}", 'purecart_suspended_grace_ending' );
 			}
+		}
+	}
+
+	/**
+	 * Make sure WooCommerce has constructed its WC_Email objects, so the
+	 * reminder hooks below actually have listeners attached.
+	 *
+	 * @since 1.0.0
+	 * @return void
+	 */
+	private function ensure_mailer(): void {
+		if ( function_exists( 'WC' ) ) {
+			WC()->mailer();
 		}
 	}
 
