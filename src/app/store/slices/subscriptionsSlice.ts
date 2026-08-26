@@ -26,6 +26,10 @@ import {
 	cancelSubscription as apiCancelSubscription,
 	acceptCancellationOffer as apiAcceptCancellationOffer,
 	skipSubscription as apiSkipSubscription,
+	upgradeSubscription as apiUpgradeSubscription,
+	applySubscriptionDiscount as apiApplySubscriptionDiscount,
+	sendCardUpdate as apiSendCardUpdate,
+	resubscribeSubscription as apiResubscribeSubscription,
 } from '../../utils/api';
 import type { SubscriptionRecord } from '../../components/Subscriptions/types';
 
@@ -171,6 +175,70 @@ export const skipSubscriptionThunk = createAsyncThunk(
 	}
 );
 
+/**
+ * Upgrades or changes subscription plan tier.
+ */
+export const upgradeSubscriptionThunk = createAsyncThunk(
+	'subscriptions/upgrade',
+	async ( {
+		id,
+		productId,
+		cycle,
+		planLabel,
+		amount,
+		mode,
+	}: {
+		id: string;
+		productId?: number;
+		cycle?: string;
+		planLabel?: string;
+		amount?: number;
+		mode?: 'prorate_immediately' | 'apply_at_renewal' | 'no_proration';
+	} ) => {
+		return await apiUpgradeSubscription( id, { productId, cycle, planLabel, amount, mode } );
+	}
+);
+
+/**
+ * Applies a manual admin discount to a subscription.
+ */
+export const applyDiscountThunk = createAsyncThunk(
+	'subscriptions/applyDiscount',
+	async ( {
+		id,
+		percent,
+		duration,
+		cycles,
+	}: {
+		id: string;
+		percent: number;
+		duration: string;
+		cycles?: number;
+	} ) => {
+		return await apiApplySubscriptionDiscount( id, percent, duration, cycles );
+	}
+);
+
+/**
+ * Generates a card update magic link.
+ */
+export const sendCardUpdateThunk = createAsyncThunk(
+	'subscriptions/sendCardUpdate',
+	async ( id: string ) => {
+		return await apiSendCardUpdate( id );
+	}
+);
+
+/**
+ * Resubscribes / reactivates a cancelled or expired subscription.
+ */
+export const resubscribeSubscriptionThunk = createAsyncThunk(
+	'subscriptions/resubscribe',
+	async ( id: string ) => {
+		return await apiResubscribeSubscription( id );
+	}
+);
+
 const subscriptionsSlice = createSlice( {
 	name: 'subscriptions',
 	initialState,
@@ -270,6 +338,18 @@ const subscriptionsSlice = createSlice( {
 				state.items = state.items.map( ( r ) => ( r.id === updated.id ? updated : r ) );
 			} )
 			.addCase( skipSubscriptionThunk.fulfilled, ( state, action ) => {
+				const updated = action.payload;
+				state.items = state.items.map( ( r ) => ( r.id === updated.id ? updated : r ) );
+			} )
+			.addCase( upgradeSubscriptionThunk.fulfilled, ( state, action ) => {
+				const updated = action.payload;
+				state.items = state.items.map( ( r ) => ( r.id === updated.id ? updated : r ) );
+			} )
+			.addCase( applyDiscountThunk.fulfilled, ( state, action ) => {
+				const updated = action.payload;
+				state.items = state.items.map( ( r ) => ( r.id === updated.id ? updated : r ) );
+			} )
+			.addCase( resubscribeSubscriptionThunk.fulfilled, ( state, action ) => {
 				const updated = action.payload;
 				state.items = state.items.map( ( r ) => ( r.id === updated.id ? updated : r ) );
 			} );

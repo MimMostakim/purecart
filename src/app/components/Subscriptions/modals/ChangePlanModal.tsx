@@ -27,7 +27,7 @@ function parseAmount( formatted: string ): number {
 interface ChangePlanModalProps {
 	row: SubscriptionRecord;
 	onClose: () => void;
-	onConfirm: ( patch: Partial< SubscriptionRecord > ) => void;
+	onConfirm: ( plan: (typeof PLAN_OPTIONS)[0], timing: 'immediate' | 'scheduled' ) => void;
 }
 
 /**
@@ -48,19 +48,7 @@ export function ChangePlanModal( { row, onClose, onConfirm }: ChangePlanModalPro
 	const noChange = plan.cycle === row.cycle;
 
 	const handleConfirm = () => {
-		if ( timing === 'immediate' ) {
-			onConfirm( {
-				cycle: plan.cycle as SubscriptionRecord[ 'cycle' ],
-				amount: plan.amount,
-				nextPayment: plan.cycle === 'Lifetime' ? null : addBillingInterval( null, row.billing ),
-			} );
-		} else {
-			const isUpgrade = parseAmount( plan.amount ) > row.amountRaw;
-			onConfirm( {
-				pendingSwitchProduct: plan.label,
-				pendingSwitchType: isUpgrade ? 'upgrade' : 'downgrade',
-			} );
-		}
+		onConfirm( plan, timing );
 		onClose();
 	};
 

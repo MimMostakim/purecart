@@ -455,6 +455,129 @@ export async function retryPaymentSubscription(id: string): Promise<Subscription
 }
 
 /**
+ * POST /purecart/v1/subscriptions/{id}/upgrade - switch product plan/tier with proration.
+ */
+export async function upgradeSubscription(
+	id: string,
+	params: {
+		productId?: number;
+		cycle?: string;
+		planLabel?: string;
+		amount?: number;
+		mode?: 'prorate_immediately' | 'apply_at_renewal' | 'no_proration';
+	}
+): Promise<SubscriptionRecord> {
+	const { productId, cycle, planLabel, amount, mode = 'apply_at_renewal' } = params;
+	if (USE_DUMMY_DATA) {
+		const sub = dummySubscriptions.find((r) => r.id === id);
+		if (!sub) throw new Error(`Subscription ${id} not found`);
+		const updated: SubscriptionRecord = {
+			...sub,
+			pendingSwitchProduct: mode === 'apply_at_renewal' ? (planLabel || String(productId || 'Plan')) : null,
+			pendingSwitchType: mode === 'apply_at_renewal' ? 'upgrade' : null,
+		};
+		dummySubscriptions = dummySubscriptions.map((r) => (r.id === id ? updated : r));
+		return delay(updated, 200);
+	}
+	const numericId = parseInt(id.replace(/\D/g, ''), 10) || id;
+	const res = await apiFetch<any>(`/subscriptions/${numericId}/upgrade`, {
+		method: 'POST',
+		body: JSON.stringify({
+			product_id: productId,
+			cycle,
+			plan_label: planLabel,
+			amount,
+			mode,
+		}),
+	});
+	return mapBackendSubscriptionToRecord(res);
+}
+
+/**
+ * POST /purecart/v1/subscriptions/{id}/discount - apply manual admin discount.
+ */
+export async function applySubscriptionDiscount(
+	id: string,
+	percent: number,
+	duration: string,
+	cycles?: number
+): Promise<SubscriptionRecord> {
+	if (USE_DUMMY_DATA) {
+		const sub = dummySubscriptions.find((r) => r.id === id);
+		if (!sub) throw new Error(`Subscription ${id} not found`);
+		const rem = duration === 'Forever' ? 999 : (cycles || parseInt(duration, 10) || 1);
+		const updated: SubscriptionRecord = {
+			...sub,
+			discountPercent: percent,
+			retentionDiscountRemaining: rem,
+		};
+		dummySubscriptions = dummySubscriptions.map((r) => (r.id === id ? updated : r));
+		return delay(updated, 200);
+	}
+	const numericId = parseInt(id.replace(/\D/g, ''), 10) || id;
+	const res = await apiFetch<any>(`/subscriptions/${numericId}/discount`, {
+		method: 'POST',
+		body: JSON.stringify({ percent, duration, cycles }),
+	});
+	return mapBackendSubscriptionToRecord(res);
+}
+
+/**
+ * POST /purecart/v1/subscriptions/{id}/send-card-update - generates magic card-update link.
+ */
+export async function sendCardUpdate(id: string): Promise<{ token: string; url: string }> {
+	if (USE_DUMMY_DATA) {
+		const dummyToken = 'tok_' + Math.random().toString(36).slice(2, 10);
+		return delay({
+			token: dummyToken,
+			url: `${window.location.origin}/?purecart_subscription=${id}&purecart_token=${dummyToken}`,
+		}, 200);
+	}
+	const numericId = parseInt(id.replace(/\D/g, ''), 10) || id;
+	return await apiFetch<{ token: string; url: string }>(`/subscriptions/${numericId}/send-card-update`, {
+		method: 'POST',
+	});
+}
+
+/**
+ * POST /purecart/v1/subscriptions/{id}/resubscribe - reactivates or clones subscription.
+ */
+export async function resubscribeSubscription(id: string): Promise<SubscriptionRecord> {
+	if (USE_DUMMY_DATA) {
+		const sub = dummySubscriptions.find((r) => r.id === id);
+		if (!sub) throw new Error(`Subscription ${id} not found`);
+		const updated: SubscriptionRecord = {
+			...sub,
+			status: 'active',
+			cancellationDate: null,
+			cancellationReasonId: null,
+			nextPayment: addBillingInterval(null, sub.billing),
+		};
+		dummySubscriptions = dummySubscriptions.map((r) => (r.id === id ? updated : r));
+		return delay(updated, 200);
+	}
+	const numericId = parseInt(id.replace(/\D/g, ''), 10) || id;
+	const res = await apiFetch<any>(`/subscriptions/${numericId}/resubscribe`, {
+		method: 'POST',
+	});
+	return mapBackendSubscriptionToRecord(res);
+}
+
+/**
+ * GET /purecart/v1/subscriptions/export - trigger browser download of CSV report.
+ */
+export async function exportSubscriptionsCsv(status?: string): Promise<void> {
+	const params = status && status !== 'all' ? `?status=${encodeURIComponent(status)}` : '';
+	const downloadUrl = `${PURECART_API_ROOT}/subscriptions/export${params}`;
+	const link = document.createElement('a');
+	link.href = downloadUrl;
+	link.setAttribute('download', `purecart-subscriptions-${new Date().toISOString().slice(0, 10)}.csv`);
+	document.body.appendChild(link);
+	link.click();
+	document.body.removeChild(link);
+}
+
+/**
  * Generic patch used by row-action mutations. Routes to dedicated action endpoints when live.
  *
  * @since 1.0.0

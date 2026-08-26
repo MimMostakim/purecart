@@ -375,7 +375,7 @@ export function mapBackendSubscriptionToRecord( raw: any ): SubscriptionRecord {
 		maxLengthAt: raw.maxLengthAt ?? raw.max_length_at ?? null,
 		churnRiskScore,
 		customerLtv: Number( raw.customerLtv ?? raw.customer_ltv ?? 0 ),
-		pendingSwitchProduct: raw.pendingSwitchProduct ?? ( raw.pending_switch_product ? String( raw.pending_switch_product) : null ),
+		pendingSwitchProduct: raw.pendingSwitchProduct ?? raw.pending_switch_product_name ?? ( raw.pending_switch_product ? String( raw.pending_switch_product) : null ),
 		pendingSwitchType: raw.pendingSwitchType ?? raw.pending_switch_type ?? null,
 		retentionDiscountRemaining: Number( raw.retentionDiscountRemaining ?? raw.discount_renewals_remaining ?? 0 ),
 		discountPercent: raw.discountPercent !== undefined ? raw.discountPercent : ( raw.discount_percent !== undefined ? ( raw.discount_percent === null ? null : Number( raw.discount_percent ) ) : null ),

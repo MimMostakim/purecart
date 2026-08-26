@@ -38,6 +38,7 @@ import { SubscriptionsBulkBar } from './SubscriptionsBulkBar';
 import { useSubscriptionActions } from './useSubscriptionActions';
 import { subscriptionDetailPath } from '../../router';
 import { M3 } from '../../utils/static-data';
+import { exportSubscriptionsCsv } from '../../utils/api';
 
 /**
  * Renders the subscriptions list page.
@@ -163,7 +164,14 @@ export function SubscriptionsPage() {
 				productOptions={productOptions}
 				cycleOptions={cycleOptions}
 				onClearAll={clearAllFilters}
-				onExportCsv={() => showToast('Subscriptions exported as CSV', 'success')}
+				onExportCsv={async () => {
+					try {
+						await exportSubscriptionsCsv(filters.status !== 'all' ? filters.status : undefined);
+						showToast('Subscriptions exported as CSV', 'success');
+					} catch (err: any) {
+						showToast(err?.message || 'Failed to export subscriptions CSV', 'error');
+					}
+				}}
 			/>
 
 			<SubscriptionsTable

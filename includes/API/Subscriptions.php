@@ -19,6 +19,7 @@ use PureCart\Subscriptions\DunningManager;
 use PureCart\Subscriptions\PlanUpgrade;
 use PureCart\Subscriptions\WebhookHandler;
 use PureCart\Subscriptions\ChurnScorer;
+use PureCart\Subscriptions\BillingClock;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -253,6 +254,16 @@ class Subscriptions extends PureCartApi {
 
 		register_rest_route(
 			$ns,
+			$base . '/(?P<id>\d+)/discount',
+			array(
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'handle_apply_discount' ),
+				'permission_callback' => array( $this, 'permission_admin' ),
+			)
+		);
+
+		register_rest_route(
+			$ns,
 			$base . '/(?P<id>\d+)/cancellation/reasons',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -317,6 +328,16 @@ class Subscriptions extends PureCartApi {
 		register_rest_route(
 			$ns,
 			'/reports/subscriptions/export',
+			array(
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_report_export' ),
+				'permission_callback' => array( $this, 'permission_admin' ),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			$base . '/export',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'get_report_export' ),
@@ -587,6 +608,13 @@ class Subscriptions extends PureCartApi {
 			'displayLabel' => $label,
 		);
 
+		if ( ! empty( $data['pending_switch_product'] ) ) {
+			$pending_product                     = wc_get_product( (int) $data['pending_switch_product'] );
+			$data['pending_switch_product_name'] = $pending_product ? $pending_product->get_name() : '#' . $data['pending_switch_product'];
+		} else {
+			$data['pending_switch_product_name'] = null;
+		}
+
 		/**
 		 * Filters one subscription's REST representation.
 		 *
@@ -700,15 +728,74 @@ class Subscriptions extends PureCartApi {
 	public function handle_action_upgrade( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$id             = (int) $request->get_param( 'id' );
 		$new_product_id = absint( $request->get_param( 'product_id' ) );
-		$mode           = $request->get_param( 'mode' ) ? sanitize_key( (string) $request->get_param( 'mode' ) ) : null;
+		$mode           = $request->get_param( 'mode' ) ? sanitize_key( (string) $request->get_param( 'mode' ) ) : 'apply_at_renewal';
+		$cycle          = $request->get_param( 'cycle' ) ? sanitize_text_field( (string) $request->get_param( 'cycle' ) ) : null;
+		$plan_label     = $request->get_param( 'plan_label' ) ? sanitize_text_field( (string) $request->get_param( 'plan_label' ) ) : null;
+		$amount         = $request->get_param( 'amount' ) ? (float) $request->get_param( 'amount' ) : null;
 
-		if ( ! $new_product_id ) {
-			return new \WP_Error( 'purecart_missing_product', __( 'A target product_id is required.', 'purecart' ), array( 'status' => 400 ) );
+		$sub = $this->subscriptions->find( $id );
+		if ( ! $sub ) {
+			return $this->not_found();
 		}
 
-		$result = $this->plan_upgrade->process( $id, $new_product_id, $mode );
+		if ( $new_product_id && $new_product_id !== (int) $sub->product_id ) {
+			$result = $this->plan_upgrade->process( $id, $new_product_id, $mode );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
+		} else {
+			// Plan / Cycle switch on current subscription (e.g. Monthly -> Annual or Lifetime)
+			if ( 'apply_at_renewal' === $mode ) {
+				$target_product_id = $new_product_id ?: (int) $sub->product_id;
+				$this->subscriptions->update(
+					$id,
+					array(
+						'pending_switch_product' => $target_product_id,
+						'pending_switch_type'    => ( null !== $amount && $amount >= (float) $sub->recurring_amount ) ? 'upgrade' : 'downgrade',
+					)
+				);
+				$this->logs->log(
+					$id,
+					'plan_switch_scheduled',
+					array( 'note' => "plan={$plan_label}, mode=apply_at_renewal" )
+				);
+			} else {
+				// Immediate change
+				$interval = 1;
+				$period   = 'month';
+				if ( 'Annual' === $cycle || 'yearly' === strtolower( (string) $cycle ) ) {
+					$interval = 1;
+					$period   = 'year';
+				} elseif ( 'Lifetime' === $cycle ) {
+					$interval = 1;
+					$period   = 'year';
+				}
 
-		return is_wp_error( $result ) ? $result : rest_ensure_response( $this->prepare_subscription( $this->subscriptions->find( $id ) ) );
+				$update_data = array(
+					'billing_interval'       => $interval,
+					'billing_period'         => $period,
+					'pending_switch_product' => null,
+					'pending_switch_type'    => null,
+				);
+				if ( null !== $amount && $amount > 0 ) {
+					$update_data['recurring_amount'] = $amount;
+				}
+				if ( 'Lifetime' === $cycle ) {
+					$update_data['next_payment_at'] = null;
+				} else {
+					$update_data['next_payment_at'] = BillingClock::add_interval( current_time( 'mysql' ), $interval, $period );
+				}
+
+				$this->subscriptions->update( $id, $update_data );
+				$this->logs->log(
+					$id,
+					'plan_switched',
+					array( 'note' => "plan={$plan_label}, cycle={$cycle}, amount={$amount}" )
+				);
+			}
+		}
+
+		return rest_ensure_response( $this->prepare_subscription( $this->subscriptions->find( $id ) ) );
 	}
 
 	/**
@@ -799,6 +886,56 @@ class Subscriptions extends PureCartApi {
 				),
 			)
 		);
+	}
+
+	/**
+	 * POST /subscriptions/{id}/discount — apply custom discount percentage & duration.
+	 *
+	 * @since 1.0.0
+	 * @param \WP_REST_Request $request REST request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function handle_apply_discount( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$id       = (int) $request->get_param( 'id' );
+		$percent  = (float) $request->get_param( 'percent' );
+		$duration = sanitize_text_field( (string) $request->get_param( 'duration' ) );
+		$cycles   = (int) $request->get_param( 'cycles' );
+
+		$sub = $this->subscriptions->find( $id );
+		if ( ! $sub ) {
+			return $this->not_found();
+		}
+
+		if ( $percent <= 0 || $percent > 100 ) {
+			return new \WP_Error( 'purecart_invalid_discount', __( 'Discount percentage must be between 1 and 100.', 'purecart' ), array( 'status' => 400 ) );
+		}
+
+		// Resolve cycle count if not directly provided
+		if ( ! $cycles ) {
+			if ( 'Once' === $duration ) {
+				$cycles = 1;
+			} elseif ( 'Forever' === $duration ) {
+				$cycles = 999;
+			} else {
+				$cycles = (int) filter_var( $duration, FILTER_SANITIZE_NUMBER_INT ) ?: 1;
+			}
+		}
+
+		$this->subscriptions->update(
+			$id,
+			array(
+				'discount_percent'            => $percent,
+				'discount_renewals_remaining' => $cycles,
+			)
+		);
+
+		$this->logs->log(
+			$id,
+			'discount_applied',
+			array( 'note' => "percent={$percent}%, duration={$duration}, cycles={$cycles}" )
+		);
+
+		return rest_ensure_response( $this->prepare_subscription( $this->subscriptions->find( $id ) ) );
 	}
 
 	// -----------------------------------------------------------------------

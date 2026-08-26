@@ -263,21 +263,32 @@ export function SubscriptionsTable({
 									</td>
 									<td className="px-3 py-3">
 										<div
-											className="text-sm"
+											className="text-sm font-medium"
 											style={{ color: M3.onSurface, fontFamily: 'Roboto, sans-serif' }}
 										>
 											{row.product}
 										</div>
-										<span
-											className="inline-block text-xs px-1.5 py-0.5 rounded-full mt-0.5"
-											style={{
-												backgroundColor: M3.surfaceContainerHigh,
-												color: M3.onSurfaceVariant,
-												fontFamily: 'Roboto, sans-serif',
-											}}
-										>
-											{row.billing?.displayLabel ?? ''}
-										</span>
+										<div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+											<span
+												className="inline-block text-xs px-1.5 py-0.5 rounded-full"
+												style={{
+													backgroundColor: M3.surfaceContainerHigh,
+													color: M3.onSurfaceVariant,
+													fontFamily: 'Roboto, sans-serif',
+												}}
+											>
+												{row.billing?.displayLabel ?? ''}
+											</span>
+											{row.pendingSwitchProduct ? (
+												<span
+													className="text-[11px] font-sans font-medium px-2 py-0.5 rounded-full"
+													style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8' }}
+													title={`Scheduled to switch to ${row.pendingSwitchProduct} on renewal`}
+												>
+													🔄 Switch to {row.pendingSwitchProduct} on renewal
+												</span>
+											) : null}
+										</div>
 									</td>
 									<td className="px-3 py-3">
 										<SubscriptionTypeBadge type={row.deliveryType} size="small" />

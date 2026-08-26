@@ -53,6 +53,10 @@ import {
 	cancelSubscriptionThunk,
 	acceptCancellationOfferThunk,
 	skipSubscriptionThunk,
+	upgradeSubscriptionThunk,
+	applyDiscountThunk,
+	sendCardUpdateThunk,
+	resubscribeSubscriptionThunk,
 } from '../../store/slices/subscriptionsSlice';
 import { ConfirmDialog, Toast } from '../ui';
 import type { ActionItem, ConfirmDialogProps, ToastProps } from '../ui';
@@ -127,8 +131,22 @@ export function useSubscriptionActions() {
 
 	const sendCardUpdateEmail = (row: SubscriptionRecord) =>
 		openDialog(
-			buildSendCardUpdateDialog(row, () => {
-				showToast(`Card update link sent to ${row.customer}`, 'success');
+			buildSendCardUpdateDialog(row, async () => {
+				try {
+					const res = await dispatch(sendCardUpdateThunk(row.id)).unwrap();
+					if (res?.url && typeof navigator !== 'undefined' && navigator.clipboard) {
+						try {
+							await navigator.clipboard.writeText(res.url);
+							showToast(`Card update link generated and copied to clipboard for ${row.customer}`, 'success');
+						} catch {
+							showToast(`Card update link generated for ${row.customer}`, 'success');
+						}
+					} else {
+						showToast(`Card update link generated for ${row.customer}`, 'success');
+					}
+				} catch (err: any) {
+					showToast(err?.message || `Failed to generate card update link for ${row.customer}`, 'error');
+				}
 				closeDialog();
 			})
 		);
@@ -360,6 +378,25 @@ export function useSubscriptionActions() {
 					}),
 				} as ActionItem]
 				: []),
+			...(row.status === 'cancelled' || row.status === 'expired' || row.status === 'completed'
+				? [{
+					label: 'Resubscribe', icon: RefreshCw, dividerBefore: true,
+					onClick: () => openDialog({
+						danger: false, icon: RefreshCw, title: 'Resubscribe Customer?',
+						body: <span>Reactivate the subscription for <strong>{row.customer}</strong> on <strong>{row.product}</strong> ({row.amount})? Their billing cycle will restart from today.</span>,
+						confirmLabel: 'Resubscribe',
+						onConfirm: async () => {
+							try {
+								await dispatch(resubscribeSubscriptionThunk(row.id)).unwrap();
+								showToast(`Subscription reactivated for ${row.customer}`, 'success');
+							} catch (err: any) {
+								showToast(err?.message || `Failed to resubscribe ${row.customer}`, 'error');
+							}
+							closeDialog();
+						},
+					}),
+				} as ActionItem]
+				: []),
 			{
 				label: 'Delete Record', icon: Trash2, danger: true,
 				onClick: () => openDialog({
@@ -548,14 +585,27 @@ export function useSubscriptionActions() {
 				<ChangePlanModal
 					row={planRow}
 					onClose={() => setPlanRow(null)}
-					onConfirm={(patch) => {
-						updateRow(planRow.id, patch);
-						showToast(
-							patch.pendingSwitchProduct
-								? `${planRow.customer}'s plan change to ${patch.pendingSwitchProduct} is scheduled`
-								: `${planRow.customer} moved to a new plan`,
-							'success'
-						);
+					onConfirm={async (plan, timing) => {
+						try {
+							const mode = timing === 'immediate' ? 'prorate_immediately' : 'apply_at_renewal';
+							const amountNum = parseFloat(plan.amount.replace(/[^0-9.]/g, '')) || planRow.amountRaw;
+							await dispatch(upgradeSubscriptionThunk({
+								id: planRow.id,
+								productId: planRow.productId,
+								cycle: plan.cycle,
+								planLabel: plan.label,
+								amount: amountNum,
+								mode,
+							})).unwrap();
+							showToast(
+								timing === 'scheduled'
+									? `${planRow.customer}'s plan change to ${plan.label} is scheduled for next renewal`
+									: `${planRow.customer} moved to ${plan.label} plan`,
+								'success'
+							);
+						} catch (err: any) {
+							showToast(err?.message || `Failed to change plan for ${planRow.customer}`, 'error');
+						}
 					}}
 				/>
 			)}
@@ -564,16 +614,22 @@ export function useSubscriptionActions() {
 					row={discountRow}
 					bulkRows={discountBulkRows ?? undefined}
 					onClose={() => { setDiscountRow(null); setDiscountBulkRows(null); }}
-					onConfirm={(targetIds, pct, duration) => {
-						targetIds.forEach((id) =>
-							updateRow(id, { retentionDiscountRemaining: duration === 'Forever' ? 999 : parseInt(duration, 10) || 1 })
-						);
-						showToast(
-							targetIds.length > 1
-								? `${pct}% discount (${duration}) applied to ${targetIds.length} subscriptions`
-								: `${pct}% discount (${duration}) applied for ${discountRow.customer}`,
-							'success'
-						);
+					onConfirm={async (targetIds, pct, duration) => {
+						try {
+							await Promise.all(
+								targetIds.map((id) =>
+									dispatch(applyDiscountThunk({ id, percent: pct, duration })).unwrap()
+								)
+							);
+							showToast(
+								targetIds.length > 1
+									? `${pct}% discount (${duration}) applied to ${targetIds.length} subscriptions`
+									: `${pct}% discount (${duration}) applied for ${discountRow.customer}`,
+								'success'
+							);
+						} catch (err: any) {
+							showToast(err?.message || 'Failed to apply discount', 'error');
+						}
 					}}
 				/>
 			)}
