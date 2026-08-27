@@ -17,7 +17,7 @@ import { ArrowLeft } from 'lucide-react';
 import { M3 } from '../../utils/static-data';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { loadSubscriptions } from '../../store/slices/subscriptionsSlice';
-import { fetchSubscriptionLogs, fetchSubscriptionEmails, fetchPaymentHistory } from '../../utils/api';
+import { fetchSubscriptionLogs, fetchSubscriptionEmails, fetchPaymentHistory } from '../../api';
 import { PAGE_PATHS } from '../../router';
 import { StatusBadge } from '../ui/StatusBadge';
 import { OutlinedButton } from '../ui/OutlinedButton';

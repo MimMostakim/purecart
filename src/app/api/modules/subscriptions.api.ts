@@ -1,194 +1,33 @@
 /**
- * Dummy API layer for the Subscriptions module.
+ * Subscriptions REST API Module.
  *
- * Every exported function here mimics a real REST call to `/purecart/v1/...`
- * (see docs/subscription-module/subscription-final-dev-plan.md §6 for the
- * full real endpoint list) but currently resolves from local static data
- * instead of a network request.
- *
- * TO GO LIVE: flip `USE_DUMMY_DATA` to `false` below (and point `API_BASE` at
- * the real REST base, already read from `window.purecartConfig.restBase` when
- * PHP localizes it). Every function's signature - params in, `Promise<Shape>`
- * out - already matches what the real REST responses should look like, so
- * callers (pages/components) never need to change, only this file does.
+ * Handles subscription queries, lifecycle transitions, retention flows,
+ * logs, payment ledgers, discounts, and CSV reporting.
  *
  * @file
  * @since 1.0.0
  */
+
+import { apiFetch, delay, USE_DUMMY_DATA, getApiBase, getRestNonce } from '../client';
 import {
 	subscriptionsData,
-	revenueGoalsData,
-	churnRiskData,
 	subscriptionLogsData,
 	subscriptionEmailsData,
 	paymentHistory,
-} from './static-data';
+} from '../../utils/static-data';
 import type {
 	SubscriptionRecord,
-	PaymentRecord,
 	SubscriptionLogEntry,
 	SubscriptionEmailLogEntry,
-	RevenueGoal,
-	ChurnRiskEntry,
-} from '../components/Subscriptions/types';
+	PaymentRecord,
+} from '../../components/Subscriptions/types';
 import {
 	mapBackendSubscriptionToRecord,
 	mapRecordToBackendPatch,
-} from '../components/Subscriptions/utils';
-
-declare global {
-	interface Window {
-		purecartAdmin?: {
-			nonce: string;
-			restNonce: string; // wp_create_nonce( 'wp_rest' )
-			apiUrl: string; // e.g. 'http://localhost:8080/woo-digital-downloads/wp-json/purecart/v1/'
-			currentPage: string;
-			version: string;
-		};
-		purecartConfig?: {
-			nonce: string; // wp_create_nonce( 'wp_rest' )
-			restBase: string; // e.g. 'https://example.com/wp-json/purecart/v1'
-			adminUrl: string;
-			myAccountUrl: string;
-			currentUser: number;
-			currency: string;
-			dateFormat: string;
-		};
-	}
-}
-
-/**
- * Resolves the base REST API URL from localized script data.
- */
-export function getApiBase(): string {
-	const base = window.purecartAdmin?.apiUrl ?? window.purecartConfig?.restBase ?? '/wp-json/purecart/v1';
-	return base.replace(/\/$/, '');
-}
-
-/**
- * Resolves the REST API nonce for X-WP-Nonce header.
- */
-export function getRestNonce(): string {
-	return window.purecartAdmin?.restNonce ?? window.purecartConfig?.nonce ?? '';
-}
-
-/**
- * The one flag to flip when the backend is ready. Set to `false` to route
- * calls through the live WordPress REST API.
- */
-export const USE_DUMMY_DATA = false;
-
-/**
- * Resolves `value` after `ms` milliseconds - stands in for real network
- * latency so components built against this file already handle loading
- * states correctly before a real backend exists.
- *
- * @since 1.0.0
- *
- * @param {T}      value Value to resolve with.
- * @param {number} [ms]  Delay in milliseconds.
- *
- * @return {Promise<T>} A promise resolving to `value` after the delay.
- */
-function delay<T>(value: T, ms = 300): Promise<T> {
-	return new Promise((resolve) => setTimeout(() => resolve(value), ms));
-}
-
-/**
- * Builds a query string from key-value parameters.
- *
- * @param {Record<string, unknown>} [params]
- * @return {string}
- */
-export function buildQueryString(params?: Record<string, unknown>): string {
-	if (!params || Object.keys(params).length === 0) return '';
-	const validKeys = Object.keys(params).filter(
-		(k) => params[k] !== undefined && params[k] !== null && params[k] !== '' && params[k] !== 'All'
-	);
-	if (validKeys.length === 0) return '';
-	const qs = validKeys
-		.map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(String(params[k]))}`)
-		.join('&');
-	return `?${qs}`;
-}
-
-export interface ApiResponseWithMeta<T> {
-	data: T;
-	total: number;
-	totalPages: number;
-}
-
-/**
- * Performs an authenticated JSON request against the real PureCart REST API,
- * extracting pagination metadata headers.
- *
- * @since 1.0.0
- *
- * @param {string}                  path     Endpoint path (e.g. '/subscriptions').
- * @param {Record<string, unknown>} [params] Query params.
- * @param {RequestInit}             [options] Extra fetch options.
- *
- * @return {Promise<ApiResponseWithMeta<T>>}
- */
-export async function apiFetchWithMeta<T>(
-	path: string,
-	params?: Record<string, unknown>,
-	options?: RequestInit
-): Promise<ApiResponseWithMeta<T>> {
-	const qs = buildQueryString(params);
-	const apiBase = getApiBase();
-	const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-	const res = await fetch(`${apiBase}${normalizedPath}${qs}`, {
-		headers: {
-			'Content-Type': 'application/json',
-			'X-WP-Nonce': getRestNonce(),
-		},
-		...options,
-	});
-
-	if (!res.ok) {
-		throw new Error(`API request failed: ${res.status} ${res.statusText}`);
-	}
-
-	const totalHeader = res.headers.get('x-wp-total') ?? res.headers.get('X-WP-Total');
-	const totalPagesHeader = res.headers.get('x-wp-totalpages') ?? res.headers.get('X-WP-TotalPages');
-	const data = (await res.json()) as T;
-
-	const total = totalHeader ? parseInt(totalHeader, 10) : (Array.isArray(data) ? data.length : 0);
-	const totalPages = totalPagesHeader ? parseInt(totalPagesHeader, 10) : 1;
-
-	return {
-		data,
-		total,
-		totalPages,
-	};
-}
-
-/**
- * Performs an authenticated JSON request against the real PureCart REST API.
- *
- * @since 1.0.0
- *
- * @param {string}      path    Path appended to API_BASE, e.g. '/subscriptions'.
- * @param {RequestInit} [options] Extra fetch options (method, body, etc.).
- *
- * @return {Promise<T>} The parsed JSON response body.
- */
-async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-	const apiBase = getApiBase();
-	const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-	const res = await fetch(`${apiBase}${normalizedPath}`, {
-		headers: {
-			'Content-Type': 'application/json',
-			'X-WP-Nonce': getRestNonce(),
-		},
-		...options,
-	});
-	if (!res.ok) {
-		throw new Error(`API request failed: ${res.status} ${res.statusText}`);
-	}
-	return res.json();
-}
+	mapBackendLogToEntry,
+	mapBackendPaymentToRecord,
+	addBillingInterval,
+} from '../../components/Subscriptions/utils';
 
 // In-memory mutable copy so dummy "writes" (pause/cancel/update) persist
 // across calls within a session, the same way a real backend would persist
@@ -213,7 +52,7 @@ export async function getDummySubscriptionsPaginated(params?: Record<string, unk
 	const page = Math.max(1, Number(params?.page ?? 1));
 	const perPage = Math.max(1, Number(params?.per_page ?? 10));
 
-	let filtered = dummySubscriptions.filter((r) => {
+	const filtered = dummySubscriptions.filter((r) => {
 		const matchSearch =
 			!search ||
 			r.customer.toLowerCase().includes(search) ||
@@ -267,9 +106,7 @@ export async function fetchSubscriptions(): Promise<SubscriptionRecord[]> {
  * GET /purecart/v1/subscriptions/{id} - a single subscription.
  *
  * @since 1.0.0
- *
  * @param {string} id Subscription ID, e.g. 'SUB-001'.
- *
  * @return {Promise<SubscriptionRecord|undefined>} The matching record, or undefined if not found.
  */
 export async function fetchSubscription(id: string): Promise<SubscriptionRecord | undefined> {
@@ -567,24 +404,79 @@ export async function resubscribeSubscription(id: string): Promise<SubscriptionR
  * GET /purecart/v1/subscriptions/export - trigger browser download of CSV report.
  */
 export async function exportSubscriptionsCsv(status?: string): Promise<void> {
+	if (USE_DUMMY_DATA) {
+		const filtered = status && status !== 'all'
+			? dummySubscriptions.filter((s) => s.status.toLowerCase() === status.toLowerCase())
+			: dummySubscriptions;
+		const headers = ['ID', 'Customer Name', 'Email', 'Plan', 'Billing Cycle', 'Amount', 'Status', 'Start Date', 'Next Payment'];
+		const rows = filtered.map((s) => [
+			s.id,
+			`"${(s.customer?.name || '').replace(/"/g, '""')}"`,
+			`"${(s.customer?.email || '').replace(/"/g, '""')}"`,
+			`"${(s.plan || '').replace(/"/g, '""')}"`,
+			`"${(s.billing || '').replace(/"/g, '""')}"`,
+			s.amount,
+			s.status,
+			s.startDate || '',
+			s.nextPayment || '',
+		]);
+		const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+		const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement('a');
+		link.href = url;
+		link.setAttribute('download', `purecart-subscriptions-${new Date().toISOString().slice(0, 10)}.csv`);
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+		URL.revokeObjectURL(url);
+		return;
+	}
+
 	const params = status && status !== 'all' ? `?status=${encodeURIComponent(status)}` : '';
-	const downloadUrl = `${PURECART_API_ROOT}/subscriptions/export${params}`;
+	const apiBase = getApiBase();
+	const res = await fetch(`${apiBase}/subscriptions/export${params}`, {
+		method: 'GET',
+		headers: {
+			'X-WP-Nonce': getRestNonce(),
+		},
+	});
+
+	if (!res.ok) {
+		throw new Error(`Failed to export subscriptions CSV: ${res.status} ${res.statusText}`);
+	}
+
+	const blob = await res.blob();
+	const url = URL.createObjectURL(blob);
 	const link = document.createElement('a');
-	link.href = downloadUrl;
+	link.href = url;
 	link.setAttribute('download', `purecart-subscriptions-${new Date().toISOString().slice(0, 10)}.csv`);
 	document.body.appendChild(link);
 	link.click();
 	document.body.removeChild(link);
+	URL.revokeObjectURL(url);
+}
+
+/**
+ * DELETE /purecart/v1/subscriptions/{id} - permanently delete subscription record.
+ */
+export async function deleteSubscription(id: string): Promise<{ deleted: boolean; id: string }> {
+	if (USE_DUMMY_DATA) {
+		dummySubscriptions = dummySubscriptions.filter((r) => r.id !== id);
+		return delay({ deleted: true, id }, 200);
+	}
+	const numericId = parseInt(id.replace(/\D/g, ''), 10) || id;
+	return await apiFetch<{ deleted: boolean; id: string }>(`/subscriptions/${numericId}`, {
+		method: 'DELETE',
+	});
 }
 
 /**
  * Generic patch used by row-action mutations. Routes to dedicated action endpoints when live.
  *
  * @since 1.0.0
- *
  * @param {string}                        id    Subscription ID to update.
  * @param {Partial<SubscriptionRecord>}   patch Fields to merge into the record.
- *
  * @return {Promise<SubscriptionRecord>} The updated record.
  */
 export async function updateSubscription(
@@ -600,7 +492,6 @@ export async function updateSubscription(
 		return delay(updated, 200);
 	}
 
-	// Route to specific REST endpoint based on action
 	if (patch.status === 'paused') {
 		return pauseSubscription(id, patch.pauseEndDate);
 	}
@@ -627,26 +518,21 @@ export async function updateSubscription(
  * GET /purecart/v1/subscriptions/{id}/logs - the status-history event log.
  *
  * @since 1.0.0
- *
  * @param {string} id Subscription ID.
- *
  * @return {Promise<SubscriptionLogEntry[]>} That subscription's log entries.
  */
 export async function fetchSubscriptionLogs(id: string): Promise<SubscriptionLogEntry[]> {
 	if (USE_DUMMY_DATA) return delay(subscriptionLogsData[id] ?? []);
 	const numericId = parseInt(id.replace(/\D/g, ''), 10) || id;
-	return apiFetch<SubscriptionLogEntry[]>(`/subscriptions/${numericId}/logs`);
+	const res = await apiFetch<any[]>(`/subscriptions/${numericId}/logs`);
+	return Array.isArray(res) ? res.map(mapBackendLogToEntry) : [];
 }
 
 /**
- * Emails-sent history for one subscription. No dedicated endpoint exists in
- * the backend dev plan yet - this path is a best guess, confirm it once the
- * REST controller ships.
+ * Emails-sent history for one subscription.
  *
  * @since 1.0.0
- *
  * @param {string} id Subscription ID.
- *
  * @return {Promise<SubscriptionEmailLogEntry[]>} That subscription's sent-email log.
  */
 export async function fetchSubscriptionEmails(id: string): Promise<SubscriptionEmailLogEntry[]> {
@@ -656,42 +542,15 @@ export async function fetchSubscriptionEmails(id: string): Promise<SubscriptionE
 }
 
 /**
- * Per-charge payment ledger for one subscription (backs the Payment History
- * modal/tab). No dedicated endpoint documented yet either - same caveat as
- * fetchSubscriptionEmails().
+ * Per-charge payment ledger for one subscription.
  *
  * @since 1.0.0
- *
  * @param {string} id Subscription ID.
- *
  * @return {Promise<PaymentRecord[]>} That subscription's payment records.
  */
 export async function fetchPaymentHistory(id: string): Promise<PaymentRecord[]> {
 	if (USE_DUMMY_DATA) return delay(paymentHistory[id] ?? []);
 	const numericId = parseInt(id.replace(/\D/g, ''), 10) || id;
-	return apiFetch<PaymentRecord[]>(`/subscriptions/${numericId}/payments`);
-}
-
-/**
- * GET /purecart/v1/subscriptions/revenue-goals - admin-configured revenue goals.
- *
- * @since 1.0.0
- * @return {Promise<RevenueGoal[]>} All revenue goals.
- */
-export async function fetchRevenueGoals(): Promise<RevenueGoal[]> {
-	if (USE_DUMMY_DATA) return delay([...revenueGoalsData]);
-	return apiFetch<RevenueGoal[]>('/subscriptions/revenue-goals');
-}
-
-/**
- * Analytics churn-risk table data. Bundled under the backend's
- * report/summary endpoint in practice - this path is a placeholder until
- * that response shape is confirmed.
- *
- * @since 1.0.0
- * @return {Promise<ChurnRiskEntry[]>} At-risk subscription entries.
- */
-export async function fetchChurnRisk(): Promise<ChurnRiskEntry[]> {
-	if (USE_DUMMY_DATA) return delay([...churnRiskData]);
-	return apiFetch<ChurnRiskEntry[]>('/subscriptions/report/churn-risk');
+	const res = await apiFetch<any[]>(`/subscriptions/${numericId}/payments`);
+	return Array.isArray(res) ? res.map(mapBackendPaymentToRecord) : [];
 }

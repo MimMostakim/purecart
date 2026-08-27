@@ -39,7 +39,7 @@ import {
 	CheckSquare,
 	Edit,
 } from 'lucide-react';
-import { fetchPaymentHistory } from '../../utils/api';
+import { fetchPaymentHistory } from '../../api';
 import { addBillingInterval } from './utils';
 import type { SubscriptionRecord, PaymentRecord, RetentionOffer } from './types';
 import { useAppDispatch } from '../../store/hooks';
@@ -57,6 +57,7 @@ import {
 	applyDiscountThunk,
 	sendCardUpdateThunk,
 	resubscribeSubscriptionThunk,
+	deleteSubscriptionThunk,
 } from '../../store/slices/subscriptionsSlice';
 import { ConfirmDialog, Toast } from '../ui';
 import type { ActionItem, ConfirmDialogProps, ToastProps } from '../ui';
@@ -116,7 +117,14 @@ export function useSubscriptionActions() {
 	const updateRow = (id: string, patch: Partial<SubscriptionRecord>) => {
 		dispatch(patchSubscription({ id, patch }));
 	};
-	const deleteRow = (id: string) => dispatch(removeSubscription(id));
+	const deleteRow = async (id: string) => {
+		try {
+			await dispatch(deleteSubscriptionThunk(id)).unwrap();
+			showToast(`Subscription ${id} deleted`, 'error');
+		} catch (err: any) {
+			showToast(err?.message || `Failed to delete subscription ${id}`, 'error');
+		}
+	};
 
 	const openPaymentHistory = (row: SubscriptionRecord) => {
 		setHistoryRow(row);
@@ -405,9 +413,8 @@ export function useSubscriptionActions() {
 						<strong style={{ fontFamily: 'Roboto Mono, monospace' }}>{row.id}</strong>{' '}
 						for <strong>{row.customer}</strong>? All payment history will be lost and this cannot be undone.</span>,
 					confirmLabel: 'Delete Record',
-					onConfirm: () => {
-						deleteRow(row.id);
-						showToast(`Subscription ${row.id} deleted`, 'error');
+					onConfirm: async () => {
+						await deleteRow(row.id);
 						closeDialog();
 					},
 				}),

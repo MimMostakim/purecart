@@ -76,7 +76,7 @@ export function SubscriptionTimeline( { events }: { events: SubscriptionLogEntry
 							className="text-xs mt-0.5"
 							style={ { color: M3.onSurfaceVariant, fontFamily: 'Roboto, sans-serif' } }
 						>
-							{ entry.actorLabel ?? entry.actorType } · { entry.createdAt }
+							{ entry.actorLabel ?? entry.actorType ?? 'System' } · { entry.createdAt ?? ( entry as any )?.created_at ?? '' }
 						</div>
 					</div>
 					{ entry.amount !== null && (

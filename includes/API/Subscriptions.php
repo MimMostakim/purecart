@@ -177,9 +177,16 @@ class Subscriptions extends PureCartApi {
 			$ns,
 			$base . '/(?P<id>\d+)',
 			array(
-				'methods'             => \WP_REST_Server::READABLE,
-				'callback'            => array( $this, 'get_subscription' ),
-				'permission_callback' => array( $this, 'permission_owner_or_admin' ),
+				array(
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_subscription' ),
+					'permission_callback' => array( $this, 'permission_owner_or_admin' ),
+				),
+				array(
+					'methods'             => \WP_REST_Server::DELETABLE,
+					'callback'            => array( $this, 'delete_subscription' ),
+					'permission_callback' => array( $this, 'permission_admin' ),
+				),
 			)
 		);
 
@@ -535,6 +542,42 @@ class Subscriptions extends PureCartApi {
 		}
 
 		return rest_ensure_response( $this->prepare_subscription( $subscription ) );
+	}
+
+	/**
+	 * DELETE /subscriptions/{id}.
+	 *
+	 * Permanently deletes a subscription and its cascading records.
+	 *
+	 * @since 1.0.0
+	 * @param \WP_REST_Request $request REST request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function delete_subscription( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$id  = (int) $request->get_param( 'id' );
+		$sub = $this->subscriptions->find( $id );
+		if ( ! $sub ) {
+			return $this->not_found();
+		}
+
+		$previous = $this->prepare_subscription( $sub );
+		$deleted  = $this->subscriptions->delete( $id );
+
+		if ( ! $deleted ) {
+			return new \WP_Error(
+				'purecart_delete_failed',
+				__( 'Could not delete subscription record.', 'purecart' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		return rest_ensure_response(
+			array(
+				'deleted'  => true,
+				'id'       => $id,
+				'previous' => $previous,
+			)
+		);
 	}
 
 	/**

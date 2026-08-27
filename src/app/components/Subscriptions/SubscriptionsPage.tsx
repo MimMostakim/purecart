@@ -38,7 +38,7 @@ import { SubscriptionsBulkBar } from './SubscriptionsBulkBar';
 import { useSubscriptionActions } from './useSubscriptionActions';
 import { subscriptionDetailPath } from '../../router';
 import { M3 } from '../../utils/static-data';
-import { exportSubscriptionsCsv } from '../../utils/api';
+import { exportSubscriptionsCsv } from '../../api';
 
 /**
  * Renders the subscriptions list page.

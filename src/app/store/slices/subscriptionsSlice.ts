@@ -30,7 +30,8 @@ import {
 	applySubscriptionDiscount as apiApplySubscriptionDiscount,
 	sendCardUpdate as apiSendCardUpdate,
 	resubscribeSubscription as apiResubscribeSubscription,
-} from '../../utils/api';
+	deleteSubscription as apiDeleteSubscription,
+} from '../../api';
 import type { SubscriptionRecord } from '../../components/Subscriptions/types';
 
 export interface SubscriptionFilters {
@@ -239,6 +240,16 @@ export const resubscribeSubscriptionThunk = createAsyncThunk(
 	}
 );
 
+/**
+ * Permanently deletes a subscription record from the database.
+ */
+export const deleteSubscriptionThunk = createAsyncThunk(
+	'subscriptions/delete',
+	async ( id: string ) => {
+		return await apiDeleteSubscription( id );
+	}
+);
+
 const subscriptionsSlice = createSlice( {
 	name: 'subscriptions',
 	initialState,
@@ -352,6 +363,10 @@ const subscriptionsSlice = createSlice( {
 			.addCase( resubscribeSubscriptionThunk.fulfilled, ( state, action ) => {
 				const updated = action.payload;
 				state.items = state.items.map( ( r ) => ( r.id === updated.id ? updated : r ) );
+			} )
+			.addCase( deleteSubscriptionThunk.fulfilled, ( state, action ) => {
+				const deletedId = action.payload.id;
+				state.items = state.items.filter( ( r ) => r.id !== deletedId );
 			} );
 	},
 } );

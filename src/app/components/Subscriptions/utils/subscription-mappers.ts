@@ -11,6 +11,8 @@
 
 import type {
 	SubscriptionRecord,
+	SubscriptionLogEntry,
+	PaymentRecord,
 	BillingPeriod,
 	BillingCycle,
 	SubscriptionDeliveryType,
@@ -441,4 +443,51 @@ export function mapRecordToBackendPatch( patch: Partial< SubscriptionRecord > ):
 	if ( patch.customerLtv !== undefined ) result.customer_ltv = patch.customerLtv;
 
 	return result;
+}
+
+/**
+ * Maps a raw backend subscription log database row to the frontend SubscriptionLogEntry shape.
+ *
+ * @since 1.0.0
+ * @param {any} raw Backend log record.
+ * @return {SubscriptionLogEntry} Normalized log entry.
+ */
+export function mapBackendLogToEntry( raw: any ): SubscriptionLogEntry {
+	return {
+		id: String( raw.id ?? Math.random().toString( 36 ).slice( 2 ) ),
+		event: raw.event ?? 'event',
+		oldStatus: raw.oldStatus ?? raw.old_status ?? null,
+		newStatus: raw.newStatus ?? raw.new_status ?? null,
+		amount: raw.amount !== undefined && raw.amount !== null ? Number( raw.amount ) : null,
+		orderId: raw.orderId ?? raw.order_id ? String( raw.orderId ?? raw.order_id ) : null,
+		note: raw.note ?? null,
+		actorType: raw.actorType ?? raw.actor_type ?? 'system',
+		actorLabel: raw.actorLabel ?? ( raw.actor_type ? ( raw.actor_type === 'admin' ? 'Admin' : raw.actor_type === 'customer' ? 'Customer' : raw.actor_type === 'webhook' ? 'Payment Gateway' : 'System' ) : null ),
+		createdAt: raw.createdAt ?? raw.created_at ?? new Date().toISOString(),
+	};
+}
+
+/**
+ * Maps a raw backend payment database row to the frontend PaymentRecord shape.
+ *
+ * @since 1.0.0
+ * @param {any} raw Backend payment record.
+ * @return {PaymentRecord} Normalized payment record.
+ */
+export function mapBackendPaymentToRecord( raw: any ): PaymentRecord {
+	return {
+		id: String( raw.id ?? Math.random().toString( 36 ).slice( 2 ) ),
+		date: raw.date ?? raw.created_at ?? raw.payment_date ?? new Date().toISOString(),
+		amount: typeof raw.amount === 'string' ? raw.amount : ( raw.amount !== undefined && raw.amount !== null ? `$${ Number( raw.amount ).toFixed( 2 ) }` : '$0.00' ),
+		amountRaw: Number( raw.amountRaw ?? raw.amount ?? 0 ),
+		method: raw.method ?? raw.payment_method ?? 'Credit Card',
+		status: raw.status ?? 'paid',
+		transactionId: raw.transactionId ?? raw.transaction_id ?? null,
+		gatewayResponse: raw.gatewayResponse ?? raw.gateway_response ?? null,
+		dunningAttempt: Number( raw.dunningAttempt ?? raw.retry_count ?? 0 ),
+		isEarlyRenewal: Boolean( raw.isEarlyRenewal ?? raw.is_early_renewal ?? false ),
+		isSplitInstallment: Boolean( raw.isSplitInstallment ?? raw.is_split_installment ?? false ),
+		installmentNumber: raw.installmentNumber !== undefined ? raw.installmentNumber : ( raw.installment_number !== undefined ? Number( raw.installment_number ) : null ),
+		refundedAmount: raw.refundedAmount !== undefined ? raw.refundedAmount : ( raw.refunded_amount !== undefined ? Number( raw.refunded_amount ) : null ),
+	};
 }

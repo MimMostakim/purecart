@@ -14,7 +14,8 @@ The PureCart Subscriptions REST API provides programmatic control over the full 
 | 1 | `GET` | `/purecart/v1/subscriptions` | Query & filter subscription records | Owner or Admin |
 | 2 | `GET` | `/purecart/v1/subscriptions/{id}` | Retrieve a single subscription record | Owner or Admin |
 | 3 | `PATCH` | `/purecart/v1/subscriptions/{id}` | Modify subscription parameters | Owner or Admin |
-| 4 | `GET` | `/purecart/v1/subscriptions/{id}/logs` | Retrieve chronological audit history | Admin Only |
+| 4 | `DELETE` | `/purecart/v1/subscriptions/{id}` | Permanently delete subscription record | Admin Only |
+| 5 | `GET` | `/purecart/v1/subscriptions/{id}/logs` | Retrieve chronological audit history | Admin Only |
 | 5 | `POST` | `/purecart/v1/subscriptions/{id}/pause` | Pause billing with optional auto-resume | Owner or Admin |
 | 6 | `POST` | `/purecart/v1/subscriptions/{id}/resume` | Unpause and resume billing | Owner or Admin |
 | 7 | `POST` | `/purecart/v1/subscriptions/{id}/cancel` | Cancel immediately or at period end | Owner or Admin |
@@ -78,7 +79,22 @@ The PureCart Subscriptions REST API provides programmatic control over the full 
 
 ---
 
-### 4. Audit & Status Logs
+### 4. Delete Subscription
+* **URL:** `DELETE /wp-json/purecart/v1/subscriptions/{id}`
+* **Permission:** `permission_admin`
+* **Response (JSON):**
+```json
+{
+  "deleted": true,
+  "id": 123,
+  "previous": { ... }
+}
+```
+* **Explanation:** Permanently removes the subscription record from `wp_purecart_subscriptions` and cleans up related logs, payments, items, and linked entities. Fires `purecart_before_subscription_deleted` and `purecart_subscription_deleted` action hooks.
+
+---
+
+### 5. Audit & Status Logs
 * **URL:** `GET /wp-json/purecart/v1/subscriptions/{id}/logs`
 * **Permission:** `permission_admin`
 * **Response:** Chronological array of audit trail entries:

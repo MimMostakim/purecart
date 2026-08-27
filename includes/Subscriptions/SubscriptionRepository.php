@@ -183,6 +183,54 @@ class SubscriptionRepository {
 	}
 
 	/**
+	 * Permanently delete a subscription row and its cascading records.
+	 *
+	 * @since 1.0.0
+	 * @param int $id Subscription row ID.
+	 * @return bool
+	 */
+	public function delete( int $id ): bool {
+		global $wpdb;
+
+		$sub = $this->find( $id );
+		if ( ! $sub ) {
+			return false;
+		}
+
+		/**
+		 * Action fired right before a subscription is deleted.
+		 *
+		 * @since 1.0.0
+		 * @param int    $id  Subscription ID.
+		 * @param object $sub Subscription record object.
+		 */
+		do_action( 'purecart_before_subscription_deleted', $id, $sub );
+
+		// Clean up associated logs, payments, linked entities, items, and revenue records.
+		$wpdb->delete( $wpdb->prefix . 'purecart_subscription_logs', array( 'subscription_id' => $id ), array( '%d' ) );
+		$wpdb->delete( $wpdb->prefix . 'purecart_subscription_payments', array( 'subscription_id' => $id ), array( '%d' ) );
+		$wpdb->delete( $wpdb->prefix . 'purecart_subscription_linked_entities', array( 'subscription_id' => $id ), array( '%d' ) );
+		$wpdb->delete( $wpdb->prefix . 'purecart_subscription_items', array( 'subscription_id' => $id ), array( '%d' ) );
+		$wpdb->delete( $wpdb->prefix . 'purecart_subscription_revenue', array( 'subscription_id' => $id ), array( '%d' ) );
+
+		$deleted = $wpdb->delete( $this->table(), array( 'id' => $id ), array( '%d' ) );
+
+		if ( false !== $deleted && $deleted > 0 ) {
+			/**
+			 * Action fired after a subscription is deleted.
+			 *
+			 * @since 1.0.0
+			 * @param int    $id  Subscription ID.
+			 * @param object $sub Previous subscription record object.
+			 */
+			do_action( 'purecart_subscription_deleted', $id, $sub );
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
 	 * Find a subscription by its primary key.
 	 *
 	 * @since 1.0.0

@@ -12,7 +12,7 @@
  */
 import { useEffect, useState } from 'react';
 import { defaultSubscriptionSettings, subscriptionsData } from '../../utils/static-data';
-import { fetchRevenueGoals } from '../../utils/api';
+import { fetchRevenueGoals } from '../../api';
 import { useAppSelector } from '../../store/hooks';
 import { FilledButton } from '../ui/FilledButton';
 import { Toast } from '../ui/Toast';

@@ -26,8 +26,12 @@ interface StatusHistoryTabProps {
  *
  * @return {JSX.Element} The status history tab content.
  */
-export function StatusHistoryTab( { events }: StatusHistoryTabProps ) {
-	const sorted = [ ...events ].sort( ( a, b ) => b.createdAt.localeCompare( a.createdAt ) );
+export function StatusHistoryTab( { events = [] }: StatusHistoryTabProps ) {
+	const sorted = [ ...( events || [] ) ].sort( ( a, b ) => {
+		const dateA = a?.createdAt ?? ( a as any )?.created_at ?? '';
+		const dateB = b?.createdAt ?? ( b as any )?.created_at ?? '';
+		return dateB.localeCompare( dateA );
+	} );
 	return (
 		<Card className="p-5">
 			<div className="text-sm font-semibold mb-4" style={ { color: M3.onSurface, fontFamily: 'Roboto, sans-serif' } }>

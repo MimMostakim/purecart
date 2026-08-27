@@ -29,7 +29,7 @@ import {
 	dunningFunnelData,
 	churnByReasonData,
 } from '../../utils/static-data';
-import { fetchRevenueGoals, fetchChurnRisk } from '../../utils/api';
+import { fetchRevenueGoals, fetchChurnRisk } from '../../api';
 import { computeMRR, countNewThisMonth, computeChurnRatePct, computeAvgLtv, addBillingInterval } from '../Subscriptions/utils';
 import { useAppSelector } from '../../store/hooks';
 import { KpiCard } from '../ui/KpiCard';
