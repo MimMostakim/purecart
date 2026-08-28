@@ -18,6 +18,7 @@ use PureCart\CustomerDashboard\Dashboard;
 use PureCart\Downloads\AccountDownloadsMerger;
 use PureCart\Admin\Admin;
 use PureCart\Subscriptions\Module as SubscriptionsModule;
+use PureCart\Updates\Module as UpdatesModule;
 use PureCart\CLI\LicenseCommands;
 use PureCart\Licensing\JwtHooks;
 
@@ -63,6 +64,7 @@ final class Plugin {
 		new Dashboard();
 		new AccountDownloadsMerger();
 		new SubscriptionsModule();
+		new UpdatesModule();
 		new JwtHooks();
 
 		if ( is_admin() ) {
