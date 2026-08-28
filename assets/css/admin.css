@@ -77,6 +77,31 @@
     cursor: pointer;
 }
 
+.purecart-license-key--hidden {
+    letter-spacing: 2px;
+    user-select: none;
+    cursor: default;
+}
+
+.purecart-reveal-key,
+.purecart-copy-key {
+    margin-left: 6px;
+}
+
+.purecart-activate-license {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.purecart-activate-license input[type="text"] {
+    width: 140px;
+}
+
+.purecart-activate-result {
+    font-size: .8rem;
+}
+
 /* ── Expired download label ───────────────────────────── */
 .purecart-expired {
     color: #856404;

@@ -8,9 +8,20 @@
  * @file
  * @since 1.0.0
  */
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Filter, ChevronDown, Check } from 'lucide-react';
 import { M3 } from '../../utils/static-data';
+
+export interface FilterChipProps {
+	label: string;
+	value?: string;
+	options: string[];
+	onChange: ( v: string ) => void;
+	isOpen?: boolean;
+	onToggle?: () => void;
+	onClose?: () => void;
+}
 
 /**
  * Renders a filter chip button with a dropdown option list.
@@ -20,31 +31,125 @@ import { M3 } from '../../utils/static-data';
  *
  * @since 1.0.0
  *
- * @param {Object}   props           Component props.
- * @param {string}   props.label     Category label displayed when no value is selected.
- * @param {string}   props.value     Currently selected option value.
- * @param {string[]} props.options   Selectable option values (excluding the implicit 'All' entry).
- * @param {Function} props.onChange  Callback invoked with the newly selected option string.
+ * @param {FilterChipProps} props Component props.
  *
  * @return {JSX.Element} The filter chip trigger and dropdown overlay.
  */
 export function FilterChip( {
 	label,
-	value,
+	value = 'All',
 	options,
 	onChange,
-}: {
-	label: string;
-	value: string;
-	options: string[];
-	onChange: ( v: string ) => void;
-} ) {
-	const [ open, setOpen ] = useState( false );
-	const active = value !== 'All';
+	isOpen,
+	onToggle,
+	onClose,
+}: FilterChipProps ) {
+	const [ internalOpen, setInternalOpen ] = useState( false );
+	const isControlled = typeof isOpen === 'boolean';
+	const open = isControlled ? isOpen : internalOpen;
+
+	const buttonRef = useRef< HTMLButtonElement >( null );
+	const menuRef = useRef< HTMLDivElement >( null );
+	const [ position, setPosition ] = useState< {
+		top?: number;
+		bottom?: number;
+		left?: number;
+		right?: number;
+	} >( {} );
+
+	const handleToggle = () => {
+		if ( isControlled ) {
+			onToggle?.();
+		} else {
+			setInternalOpen( ( o ) => ! o );
+		}
+	};
+
+	const handleClose = () => {
+		if ( isControlled ) {
+			onClose?.();
+		} else {
+			setInternalOpen( false );
+		}
+	};
+
+	const updatePosition = useCallback( () => {
+		if ( ! buttonRef.current ) return;
+		const rect = buttonRef.current.getBoundingClientRect();
+		const spaceBelow = window.innerHeight - rect.bottom;
+		const spaceAbove = rect.top;
+		const menuHeight = 280;
+		const openUp = spaceBelow < menuHeight && spaceAbove > spaceBelow;
+
+		const left = Math.max( 8, Math.min( rect.left, window.innerWidth - 180 ) );
+
+		if ( openUp ) {
+			setPosition( {
+				bottom: window.innerHeight - rect.top + 4,
+				left,
+			} );
+		} else {
+			setPosition( {
+				top: rect.bottom + 4,
+				left,
+			} );
+		}
+	}, [] );
+
+	useEffect( () => {
+		if ( ! open ) return;
+
+		updatePosition();
+
+		const handleScrollOrResize = () => {
+			updatePosition();
+		};
+
+		const handleKeyDown = ( e: KeyboardEvent ) => {
+			if ( e.key === 'Escape' ) {
+				handleClose();
+			}
+		};
+
+		const handlePointerDown = ( e: MouseEvent | TouchEvent ) => {
+			const target = e.target as Node | null;
+			if ( ! target ) return;
+			if (
+				menuRef.current?.contains( target ) ||
+				buttonRef.current?.contains( target )
+			) {
+				return;
+			}
+			handleClose();
+		};
+
+		window.addEventListener( 'resize', handleScrollOrResize );
+		window.addEventListener( 'scroll', handleScrollOrResize, true );
+		window.addEventListener( 'keydown', handleKeyDown );
+		document.addEventListener( 'pointerdown', handlePointerDown );
+
+		return () => {
+			window.removeEventListener( 'resize', handleScrollOrResize );
+			window.removeEventListener( 'scroll', handleScrollOrResize, true );
+			window.removeEventListener( 'keydown', handleKeyDown );
+			document.removeEventListener( 'pointerdown', handlePointerDown );
+		};
+	}, [ open, updatePosition ] );
+
+	const active = Boolean( value && value !== 'All' );
+
+	const getSelectAllLabel = () => {
+		if ( label.toLowerCase() === 'status' ) return 'All Statuses';
+		if ( label.toLowerCase().endsWith( 's' ) ) return `All ${ label }`;
+		return `All ${ label }s`;
+	};
+
 	return (
-		<div className="relative" style={ { isolation: 'isolate' } }>
+		<div className="relative inline-flex">
 			<button
-				onClick={ () => setOpen( ( o ) => ! o ) }
+				ref={ buttonRef }
+				type="button"
+				onClick={ handleToggle }
 				className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-all"
 				style={ {
 					backgroundColor: active
@@ -66,7 +171,7 @@ export function FilterChip( {
 						onClick={ ( e ) => {
 							e.stopPropagation();
 							onChange( 'All' );
-							setOpen( false );
+							handleClose();
 						} }
 						style={ {
 							cursor: 'pointer',
@@ -76,6 +181,7 @@ export function FilterChip( {
 							marginLeft: 1,
 							color: M3.primary,
 						} }
+						title="Clear filter"
 					>
 						×
 					</span>
@@ -83,32 +189,36 @@ export function FilterChip( {
 					<ChevronDown size={ 13 } />
 				) }
 			</button>
-			{ open && (
-				<>
+			{ open &&
+				createPortal(
 					<div
-						className="fixed inset-0 z-30"
-						onClick={ () => setOpen( false ) }
-					/>
-					<div
-						className="absolute left-0 z-40 rounded-xl overflow-hidden"
+						ref={ menuRef }
+						className="fixed rounded-xl overflow-hidden flex flex-col"
 						style={ {
-							top: 'calc(100% + 4px)',
+							...position,
+							zIndex: 9999,
 							minWidth: 168,
+							maxHeight: 280,
 							backgroundColor: M3.surface,
 							boxShadow:
-								'0 4px 8px rgba(0,0,0,0.12),0 8px 24px rgba(0,0,0,0.10)',
+								'0 4px 8px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.16)',
 							border: `1px solid ${ M3.outlineVariant }`,
 						} }
+						onClick={ ( e ) => e.stopPropagation() }
 					>
-						<div className="py-1">
+						<div
+							className="py-1 overflow-y-auto"
+							style={ { overscrollBehavior: 'contain' } }
+						>
 							{ [ 'All', ...options ].map( ( opt ) => (
 								<button
 									key={ opt }
+									type="button"
 									onClick={ () => {
 										onChange( opt );
-										setOpen( false );
+										handleClose();
 									} }
-									className="flex items-center justify-between w-full px-4 py-2.5 text-sm text-left"
+									className="flex items-center justify-between w-full px-4 py-2.5 text-sm text-left transition-colors"
 									style={ {
 										background: 'none',
 										border: 'none',
@@ -142,7 +252,7 @@ export function FilterChip( {
 												: 'transparent';
 									} }
 								>
-									{ opt === 'All' ? `All ${ label }s` : opt }
+									{ opt === 'All' ? getSelectAllLabel() : opt }
 									{ value === opt && opt !== 'All' && (
 										<Check
 											size={ 13 }
@@ -152,9 +262,9 @@ export function FilterChip( {
 								</button>
 							) ) }
 						</div>
-					</div>
-				</>
-			) }
+					</div>,
+					document.body
+				) }
 		</div>
 	);
 }

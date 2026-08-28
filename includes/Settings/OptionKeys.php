@@ -96,4 +96,12 @@ class OptionKeys {
 
 	/** Whether a customer may hold more than one active subscription at a time (default true). */
 	public const SUB_ALLOW_MULTIPLE_SUBSCRIPTIONS = 'purecart_sub_allow_multiple_subscriptions';
+
+	// ─── Licensing module ──────────────────────────────────────────────────────
+
+	/** Order status that triggers license/download/SaaS provisioning: 'completed' | 'processing' | 'both' (default 'completed'). */
+	public const LICENSE_DELIVERY_STATUS = 'purecart_license_delivery_status';
+
+	/** HS256 secret used to sign license JWTs. Auto-generated on first use if unset and PURECART_JWT_SECRET_KEY isn't defined. */
+	public const LICENSE_JWT_SECRET = 'purecart_jwt_secret_key';
 }

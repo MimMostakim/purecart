@@ -141,15 +141,57 @@ class DeliveryManager {
 		$type = $subscription['delivery_type'] ?? 'software';
 
 		if ( 'software' === $type ) {
+			if ( empty( $subscription['license_id'] ) ) {
+				return;
+			}
+
+			$licenses   = new LicenseGenerator();
+			$license_id = (int) $subscription['license_id'];
+
+			// _purecart_renewal_behavior (product meta, RND-licensing.md
+			// "Subscription Renewal Behavior") controls whether a renewal
+			// extends the existing key or revokes it and issues a fresh one.
+			$license  = $licenses->get_by_id( $license_id );
+			$behavior = 'extend';
+			if ( $license ) {
+				$product = wc_get_product( (int) $license->product_id );
+				if ( $product ) {
+					$behavior = $product->get_meta( '_purecart_renewal_behavior' ) ?: 'extend';
+				}
+			}
+
+			/**
+			 * Filter the renewal behavior for a license, overriding product meta.
+			 *
+			 * @since 1.0.0
+			 * @param string $behavior       'extend' or 'new_key'.
+			 * @param int    $license_id     License being renewed.
+			 * @param int    $subscription_id Subscription being renewed.
+			 */
+			$behavior = apply_filters( 'purecart_license_renewal_behavior', $behavior, $license_id, (int) ( $subscription['id'] ?? 0 ) );
+
+			if ( 'new_key' === $behavior ) {
+				$licenses->set_status( $license_id, 'revoked' );
+
+				$new_license = $licenses->create(
+					(int) ( $subscription['order_id'] ?? 0 ),
+					(int) ( $subscription['user_id'] ?? 0 ),
+					(int) ( $subscription['product_id'] ?? 0 )
+				);
+
+				if ( $new_license ) {
+					( new SubscriptionRepository() )->update( (int) ( $subscription['id'] ?? 0 ), array( 'license_id' => $new_license->id ) );
+				}
+				return;
+			}
+
 			// Step 16: push the license's expiry out by exactly the billing
 			// period that was just paid for, so the key keeps validating.
-			if ( ! empty( $subscription['license_id'] ) ) {
-				( new LicenseGenerator() )->extend_expiry(
-					(int) $subscription['license_id'],
-					max( 1, (int) ( $subscription['billing_interval'] ?? 1 ) ),
-					(string) ( $subscription['billing_period'] ?? 'month' )
-				);
-			}
+			$licenses->extend_expiry(
+				$license_id,
+				max( 1, (int) ( $subscription['billing_interval'] ?? 1 ) ),
+				(string) ( $subscription['billing_period'] ?? 'month' )
+			);
 			return;
 		}
 

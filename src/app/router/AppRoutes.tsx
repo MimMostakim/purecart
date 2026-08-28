@@ -1,8 +1,8 @@
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { PAGE_PATHS } from './paths';
-
-// Subscriptions (fully built)
-import { SubscriptionsPage, SubscriptionAnalyticsPage } from '../components/Subscriptions';
+import { SubscriptionsPage, SubscriptionDetailPage } from '../components/Subscriptions';
+import { SubscriptionAnalyticsPage } from '../components/Analytics';
+import { SettingsPage } from '../components/Settings';
+import { PAGE_PATHS, SUBSCRIPTION_DETAIL_PATH } from './paths';
 
 // Overview
 import { OverviewPage } from '../components/Overview/OverviewPage';
@@ -16,15 +16,15 @@ import { AffiliatesPage }   from '../components/Affiliates/AffiliatesPage';
 import { AbandonedCartPage} from '../components/AbandonedCart/AbandonedCartPage';
 import { SecurityPage }     from '../components/Security/SecurityPage';
 import { AnalyticsPage }    from '../components/Analytics/AnalyticsPage';
-import { SettingsPage }     from '../components/Settings/SettingsPage';
 
 /**
- * Centralised route table for the PureCart admin SPA.
+ * All routes for the app.
  *
- * Every admin menu entry maps to one route here. Stub pages display a
- * "Coming soon" card until the full module UI is implemented.
- *
- * @since 1.0.0
+ * Kept here rather than inline in App.tsx so route definitions, and the
+ * components they map to, live in one place. React Router v6 ranks static
+ * path segments above dynamic ones, so `/subscriptions/analytics` always
+ * matches its own route rather than being swallowed by `/subscriptions/:id`,
+ * regardless of declaration order.
  */
 export function AppRoutes() {
 	const navigate = useNavigate();
@@ -59,12 +59,12 @@ export function AppRoutes() {
 			{ /* Subscriptions */ }
 			<Route path={ PAGE_PATHS.subscriptions }          element={ <SubscriptionsPage /> } />
 			<Route
+				path={ SUBSCRIPTION_DETAIL_PATH }
+				element={ <SubscriptionDetailPage /> }
+			/>
+			<Route
 				path={ PAGE_PATHS[ 'subscription-analytics' ] }
-				element={
-					<SubscriptionAnalyticsPage
-						onBack={ () => navigate( PAGE_PATHS.subscriptions ) }
-					/>
-				}
+				element={ <SubscriptionAnalyticsPage /> }
 			/>
 
 			{ /* SaaS Accounts */ }
@@ -87,3 +87,4 @@ export function AppRoutes() {
 		</Routes>
 	);
 }
+

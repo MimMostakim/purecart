@@ -14,6 +14,8 @@ defined( 'ABSPATH' ) || exit;
 use PureCart\Licensing\LicenseGenerator;
 use PureCart\Downloads\TokenManager;
 use PureCart\SaaS\AccountProvisioner;
+use PureCart\Settings\OptionKeys;
+use PureCart\Settings\Settings;
 
 /**
  * Hooks into WooCommerce order lifecycle.
@@ -26,7 +28,17 @@ class OrderHandler {
 	 * @since 1.0.0
 	 */
 	public function __construct() {
-		add_action( 'woocommerce_order_status_completed', array( $this, 'on_order_complete' ), 10, 1 );
+		// Which order status triggers provisioning is configurable — see
+		// OptionKeys::LICENSE_DELIVERY_STATUS. on_order_complete() is
+		// idempotent (skips items already carrying license order-item meta),
+		// so 'both' can safely fire on either transition without double-issuing keys.
+		$delivery_status = Settings::get( OptionKeys::LICENSE_DELIVERY_STATUS, 'completed' );
+		if ( in_array( $delivery_status, array( 'completed', 'both' ), true ) ) {
+			add_action( 'woocommerce_order_status_completed', array( $this, 'on_order_complete' ), 10, 1 );
+		}
+		if ( in_array( $delivery_status, array( 'processing', 'both' ), true ) ) {
+			add_action( 'woocommerce_order_status_processing', array( $this, 'on_order_complete' ), 10, 1 );
+		}
 		add_action( 'woocommerce_order_status_refunded', array( $this, 'on_order_refunded' ), 10, 1 );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'on_order_cancelled' ), 10, 1 );
 		add_action( 'woocommerce_subscription_status_cancelled', array( $this, 'on_subscription_cancelled' ), 10, 1 );
@@ -63,9 +75,27 @@ class OrderHandler {
 			$product_id = $product->get_id();
 			$user_id    = (int) $order->get_customer_id();
 			$type       = $product->get_type();
+			$item_id    = $item->get_id();
 
 			if ( in_array( $type, array( 'purecart_plugin', 'purecart_saas', 'purecart_bundle' ), true ) ) {
-				( new LicenseGenerator() )->create( $order_id, $user_id, $product_id );
+				// Idempotency guard: with LICENSE_DELIVERY_STATUS = 'both' this
+				// method runs on both the processing and completed transitions —
+				// don't re-issue keys for an item that already has one.
+				if ( ! $item->get_meta( '_purecart_license_id', true ) ) {
+					$quantity = max( 1, $item->get_quantity() );
+					for ( $i = 0; $i < $quantity; $i++ ) {
+						$license = ( new LicenseGenerator() )->create( $order_id, $user_id, $product_id );
+						if ( ! $license ) {
+							continue;
+						}
+
+						// One key per unit — first key also gets the bare
+						// `_purecart_license_id` key so single-qty purchases
+						// (the overwhelming majority) stay a simple lookup.
+						$meta_key = 0 === $i ? '_purecart_license_id' : '_purecart_license_id_' . $i;
+						wc_add_order_item_meta( $item_id, $meta_key, $license->id );
+					}
+				}
 			}
 
 			if ( 'purecart_plugin' === $type || 'purecart_bundle' === $type ) {
@@ -150,6 +180,12 @@ class OrderHandler {
 			);
 
 			do_action( 'purecart_license_expired', (int) $id );
+		}
+
+		if ( ! empty( $expired ) ) {
+			// Batch hook — RND-licensing.md documents this shape (array of ids)
+			// for the Subscriptions module and the JWT token revoker.
+			do_action( 'purecart_licenses_expired', array_map( 'intval', $expired ) );
 		}
 	}
 
