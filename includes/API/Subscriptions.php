@@ -7,7 +7,7 @@
 
 declare( strict_types=1 );
 
-namespace PureCart\Api;
+namespace PureCart\API;
 
 use PureCart\Subscriptions\SubscriptionRepository;
 use PureCart\Subscriptions\SubscriptionLogRepository;
@@ -19,6 +19,7 @@ use PureCart\Subscriptions\DunningManager;
 use PureCart\Subscriptions\PlanUpgrade;
 use PureCart\Subscriptions\WebhookHandler;
 use PureCart\Subscriptions\ChurnScorer;
+use PureCart\Subscriptions\BillingClock;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -125,11 +126,48 @@ class Subscriptions extends PureCartApi {
 				'callback'            => array( $this, 'list_subscriptions' ),
 				'permission_callback' => array( $this, 'permission_admin' ),
 				'args'                => array(
-					'status' => array(
+					'status'       => array(
+						'type'     => array( 'string', 'array' ),
+						'required' => false,
+					),
+					'product'      => array(
+						'type'     => array( 'string', 'integer', 'array' ),
+						'required' => false,
+					),
+					'cycle'        => array(
+						'type'     => array( 'string', 'array' ),
+						'required' => false,
+					),
+					'type'         => array(
+						'type'     => array( 'string', 'array' ),
+						'required' => false,
+					),
+					'payment_type' => array(
+						'type'     => array( 'string', 'array' ),
+						'required' => false,
+					),
+					'churn_risk'   => array(
+						'type'     => array( 'string', 'array' ),
+						'required' => false,
+					),
+					'search'       => array(
 						'type'              => 'string',
-						'enum'              => array( 'active', 'trialing', 'paused', 'past_due', 'suspended', 'pending_cancel', 'cancelled', 'expired', 'completed' ),
-						'sanitize_callback' => 'sanitize_key',
+						'sanitize_callback' => 'sanitize_text_field',
 						'required'          => false,
+					),
+					'page'         => array(
+						'type'              => 'integer',
+						'default'           => 1,
+						'minimum'           => 1,
+						'sanitize_callback' => 'absint',
+						'required'          => false,
+					),
+					'per_page'     => array(
+						'type'     => 'integer',
+						'default'  => 20,
+						'minimum'  => -1,
+						'maximum'  => 100,
+						'required' => false,
 					),
 				),
 			)
@@ -139,9 +177,16 @@ class Subscriptions extends PureCartApi {
 			$ns,
 			$base . '/(?P<id>\d+)',
 			array(
-				'methods'             => \WP_REST_Server::READABLE,
-				'callback'            => array( $this, 'get_subscription' ),
-				'permission_callback' => array( $this, 'permission_owner_or_admin' ),
+				array(
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_subscription' ),
+					'permission_callback' => array( $this, 'permission_owner_or_admin' ),
+				),
+				array(
+					'methods'             => \WP_REST_Server::DELETABLE,
+					'callback'            => array( $this, 'delete_subscription' ),
+					'permission_callback' => array( $this, 'permission_admin' ),
+				),
 			)
 		);
 
@@ -164,11 +209,9 @@ class Subscriptions extends PureCartApi {
 				'permission_callback' => array( $this, 'permission_owner_or_admin' ),
 				'args'                => array(
 					'resume_at' => array(
-						'type'              => 'string',
-						'format'            => 'date-time',
-						'sanitize_callback' => 'sanitize_text_field',
-						'required'          => false,
-						'description'       => 'Optional MySQL datetime (Y-m-d H:i:s) at which to auto-resume the subscription.',
+						'type'        => array( 'string', 'null' ),
+						'required'    => false,
+						'description' => 'Optional MySQL datetime (Y-m-d H:i:s) or date string at which to auto-resume the subscription.',
 					),
 				),
 			)
@@ -218,6 +261,16 @@ class Subscriptions extends PureCartApi {
 
 		register_rest_route(
 			$ns,
+			$base . '/(?P<id>\d+)/discount',
+			array(
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'handle_apply_discount' ),
+				'permission_callback' => array( $this, 'permission_admin' ),
+			)
+		);
+
+		register_rest_route(
+			$ns,
 			$base . '/(?P<id>\d+)/cancellation/reasons',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -232,7 +285,7 @@ class Subscriptions extends PureCartApi {
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'get_cancellation_offers' ),
-				'permission_callback' => array( $this, 'permission_owner_only' ),
+				'permission_callback' => array( $this, 'permission_owner_or_admin' ),
 			)
 		);
 
@@ -242,7 +295,7 @@ class Subscriptions extends PureCartApi {
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'accept_cancellation_offer' ),
-				'permission_callback' => array( $this, 'permission_owner_only' ),
+				'permission_callback' => array( $this, 'permission_owner_or_admin' ),
 			)
 		);
 
@@ -282,6 +335,16 @@ class Subscriptions extends PureCartApi {
 		register_rest_route(
 			$ns,
 			'/reports/subscriptions/export',
+			array(
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_report_export' ),
+				'permission_callback' => array( $this, 'permission_admin' ),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			$base . '/export',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'get_report_export' ),
@@ -347,22 +410,42 @@ class Subscriptions extends PureCartApi {
 	// -----------------------------------------------------------------------
 
 	/**
-	 * GET /subscriptions — admin list, optionally filtered by status.
+	 * GET /subscriptions — admin list, optionally filtered by status, product, cycle, type, payment_type, churn_risk, search, and paginated.
 	 *
 	 * @since 1.0.0
 	 * @param \WP_REST_Request $request REST request.
 	 * @return \WP_REST_Response
 	 */
 	public function list_subscriptions( \WP_REST_Request $request ): \WP_REST_Response {
-		$status = sanitize_key( (string) $request->get_param( 'status' ) );
+		$status       = $request->get_param( 'status' );
+		$product      = $request->get_param( 'product' );
+		$cycle        = $request->get_param( 'cycle' );
+		$type         = $request->get_param( 'type' );
+		$payment_type = $request->get_param( 'payment_type' );
+		$churn_risk   = $request->get_param( 'churn_risk' );
+		$search       = $request->get_param( 'search' );
+		$page         = (int) ( $request->get_param( 'page' ) ?? 1 );
+		$per_page     = (int) ( $request->get_param( 'per_page' ) ?? 20 );
 
-		// Resolves Step 12's own TODO here, which deferred this to Step 15:
-		// no filter now means *every* status, not a silent "active only"
-		// default that made the admin list look like subscriptions had
-		// vanished the moment they were paused or cancelled.
-		$rows = $this->subscriptions->find_all( '' !== $status ? $status : null );
+		$result = $this->subscriptions->find_all(
+			status:       ! empty( $status ) ? $status : null,
+			product:      ! empty( $product ) ? $product : null,
+			cycle:        ! empty( $cycle ) ? $cycle : null,
+			type:         ! empty( $type ) ? $type : null,
+			payment_type: ! empty( $payment_type ) ? $payment_type : null,
+			churn_risk:   ! empty( $churn_risk ) ? $churn_risk : null,
+			search:       ! empty( $search ) ? (string) $search : null,
+			page:         $page,
+			per_page:     $per_page
+		);
 
-		return rest_ensure_response( array_map( array( $this, 'prepare_subscription' ), $rows ) );
+		$prepared = array_map( array( $this, 'prepare_subscription' ), $result['items'] );
+
+		$response = rest_ensure_response( $prepared );
+		$response->header( 'X-WP-Total', (string) $result['total'] );
+		$response->header( 'X-WP-TotalPages', (string) $result['total_pages'] );
+
+		return $response;
 	}
 
 	/**
@@ -462,6 +545,42 @@ class Subscriptions extends PureCartApi {
 	}
 
 	/**
+	 * DELETE /subscriptions/{id}.
+	 *
+	 * Permanently deletes a subscription and its cascading records.
+	 *
+	 * @since 1.0.0
+	 * @param \WP_REST_Request $request REST request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function delete_subscription( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$id  = (int) $request->get_param( 'id' );
+		$sub = $this->subscriptions->find( $id );
+		if ( ! $sub ) {
+			return $this->not_found();
+		}
+
+		$previous = $this->prepare_subscription( $sub );
+		$deleted  = $this->subscriptions->delete( $id );
+
+		if ( ! $deleted ) {
+			return new \WP_Error(
+				'purecart_delete_failed',
+				__( 'Could not delete subscription record.', 'purecart' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		return rest_ensure_response(
+			array(
+				'deleted'  => true,
+				'id'       => $id,
+				'previous' => $previous,
+			)
+		);
+	}
+
+	/**
 	 * GET /subscriptions/{id}/logs.
 	 *
 	 * @since 1.0.0
@@ -513,6 +632,32 @@ class Subscriptions extends PureCartApi {
 		// score instead of each re-implementing the 25/50/75 band boundaries.
 		$data['churn_band'] = ChurnScorer::band( (int) $subscription->churn_risk_score );
 
+		$interval = (int) ( $data['billing_interval'] ?? 1 );
+		$period   = (string) ( $data['billing_period'] ?? 'month' );
+		$label    = 1 === $interval ? ucfirst( $period ) . 'ly' : sprintf( 'Every %d %ss', $interval, $period );
+		if ( 'dayly' === strtolower( $label ) ) {
+			$label = 'Daily';
+		} elseif ( 'weekly' === strtolower( $label ) ) {
+			$label = 'Weekly';
+		} elseif ( 'monthly' === strtolower( $label ) ) {
+			$label = 'Monthly';
+		} elseif ( 'yearly' === strtolower( $label ) ) {
+			$label = 'Yearly';
+		}
+
+		$data['billing'] = array(
+			'interval'     => $interval,
+			'period'       => $period,
+			'displayLabel' => $label,
+		);
+
+		if ( ! empty( $data['pending_switch_product'] ) ) {
+			$pending_product                     = wc_get_product( (int) $data['pending_switch_product'] );
+			$data['pending_switch_product_name'] = $pending_product ? $pending_product->get_name() : '#' . $data['pending_switch_product'];
+		} else {
+			$data['pending_switch_product_name'] = null;
+		}
+
 		/**
 		 * Filters one subscription's REST representation.
 		 *
@@ -544,7 +689,15 @@ class Subscriptions extends PureCartApi {
 		$id        = (int) $request->get_param( 'id' );
 		$resume_at = $request->get_param( 'resume_at' );
 
-		$success = $this->manager->pause( $id, $resume_at ? sanitize_text_field( (string) $resume_at ) : null );
+		$resume_datetime = null;
+		if ( ! empty( $resume_at ) ) {
+			$ts = strtotime( (string) $resume_at );
+			if ( $ts ) {
+				$resume_datetime = gmdate( 'Y-m-d H:i:s', $ts );
+			}
+		}
+
+		$success = $this->manager->pause( $id, $resume_datetime );
 
 		return $this->action_result( $success, $id, __( 'Could not pause this subscription.', 'purecart' ) );
 	}
@@ -618,15 +771,74 @@ class Subscriptions extends PureCartApi {
 	public function handle_action_upgrade( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$id             = (int) $request->get_param( 'id' );
 		$new_product_id = absint( $request->get_param( 'product_id' ) );
-		$mode           = $request->get_param( 'mode' ) ? sanitize_key( (string) $request->get_param( 'mode' ) ) : null;
+		$mode           = $request->get_param( 'mode' ) ? sanitize_key( (string) $request->get_param( 'mode' ) ) : 'apply_at_renewal';
+		$cycle          = $request->get_param( 'cycle' ) ? sanitize_text_field( (string) $request->get_param( 'cycle' ) ) : null;
+		$plan_label     = $request->get_param( 'plan_label' ) ? sanitize_text_field( (string) $request->get_param( 'plan_label' ) ) : null;
+		$amount         = $request->get_param( 'amount' ) ? (float) $request->get_param( 'amount' ) : null;
 
-		if ( ! $new_product_id ) {
-			return new \WP_Error( 'purecart_missing_product', __( 'A target product_id is required.', 'purecart' ), array( 'status' => 400 ) );
+		$sub = $this->subscriptions->find( $id );
+		if ( ! $sub ) {
+			return $this->not_found();
 		}
 
-		$result = $this->plan_upgrade->process( $id, $new_product_id, $mode );
+		if ( $new_product_id && $new_product_id !== (int) $sub->product_id ) {
+			$result = $this->plan_upgrade->process( $id, $new_product_id, $mode );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
+		} else {
+			// Plan / Cycle switch on current subscription (e.g. Monthly -> Annual or Lifetime)
+			if ( 'apply_at_renewal' === $mode ) {
+				$target_product_id = $new_product_id ?: (int) $sub->product_id;
+				$this->subscriptions->update(
+					$id,
+					array(
+						'pending_switch_product' => $target_product_id,
+						'pending_switch_type'    => ( null !== $amount && $amount >= (float) $sub->recurring_amount ) ? 'upgrade' : 'downgrade',
+					)
+				);
+				$this->logs->log(
+					$id,
+					'plan_switch_scheduled',
+					array( 'note' => "plan={$plan_label}, mode=apply_at_renewal" )
+				);
+			} else {
+				// Immediate change
+				$interval = 1;
+				$period   = 'month';
+				if ( 'Annual' === $cycle || 'yearly' === strtolower( (string) $cycle ) ) {
+					$interval = 1;
+					$period   = 'year';
+				} elseif ( 'Lifetime' === $cycle ) {
+					$interval = 1;
+					$period   = 'year';
+				}
 
-		return is_wp_error( $result ) ? $result : rest_ensure_response( $this->prepare_subscription( $this->subscriptions->find( $id ) ) );
+				$update_data = array(
+					'billing_interval'       => $interval,
+					'billing_period'         => $period,
+					'pending_switch_product' => null,
+					'pending_switch_type'    => null,
+				);
+				if ( null !== $amount && $amount > 0 ) {
+					$update_data['recurring_amount'] = $amount;
+				}
+				if ( 'Lifetime' === $cycle ) {
+					$update_data['next_payment_at'] = null;
+				} else {
+					$update_data['next_payment_at'] = BillingClock::add_interval( current_time( 'mysql' ), $interval, $period );
+				}
+
+				$this->subscriptions->update( $id, $update_data );
+				$this->logs->log(
+					$id,
+					'plan_switched',
+					array( 'note' => "plan={$plan_label}, cycle={$cycle}, amount={$amount}" )
+				);
+			}
+		}
+
+		return rest_ensure_response( $this->prepare_subscription( $this->subscriptions->find( $id ) ) );
 	}
 
 	/**
@@ -717,6 +929,56 @@ class Subscriptions extends PureCartApi {
 				),
 			)
 		);
+	}
+
+	/**
+	 * POST /subscriptions/{id}/discount — apply custom discount percentage & duration.
+	 *
+	 * @since 1.0.0
+	 * @param \WP_REST_Request $request REST request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function handle_apply_discount( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$id       = (int) $request->get_param( 'id' );
+		$percent  = (float) $request->get_param( 'percent' );
+		$duration = sanitize_text_field( (string) $request->get_param( 'duration' ) );
+		$cycles   = (int) $request->get_param( 'cycles' );
+
+		$sub = $this->subscriptions->find( $id );
+		if ( ! $sub ) {
+			return $this->not_found();
+		}
+
+		if ( $percent <= 0 || $percent > 100 ) {
+			return new \WP_Error( 'purecart_invalid_discount', __( 'Discount percentage must be between 1 and 100.', 'purecart' ), array( 'status' => 400 ) );
+		}
+
+		// Resolve cycle count if not directly provided
+		if ( ! $cycles ) {
+			if ( 'Once' === $duration ) {
+				$cycles = 1;
+			} elseif ( 'Forever' === $duration ) {
+				$cycles = 999;
+			} else {
+				$cycles = (int) filter_var( $duration, FILTER_SANITIZE_NUMBER_INT ) ?: 1;
+			}
+		}
+
+		$this->subscriptions->update(
+			$id,
+			array(
+				'discount_percent'            => $percent,
+				'discount_renewals_remaining' => $cycles,
+			)
+		);
+
+		$this->logs->log(
+			$id,
+			'discount_applied',
+			array( 'note' => "percent={$percent}%, duration={$duration}, cycles={$cycles}" )
+		);
+
+		return rest_ensure_response( $this->prepare_subscription( $this->subscriptions->find( $id ) ) );
 	}
 
 	// -----------------------------------------------------------------------

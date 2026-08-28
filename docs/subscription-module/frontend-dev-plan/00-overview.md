@@ -95,13 +95,8 @@ src/app/
 │   └── subscription-types.ts                [Phase 0 — NEW: all subscription TS interfaces]
 ├── components/
 │   ├── ui/
-│   │   ├── Toggle.tsx                       [Phase 0 — NEW]
-│   │   ├── StatCard.tsx                     [Phase 0 — NEW]
-│   │   ├── SettingsField.tsx                [Phase 0 — NEW]
-│   │   ├── SettingsSelectField.tsx          [Phase 0 — NEW]
-│   │   ├── SettingsToggleField.tsx          [Phase 0 — NEW]
-│   │   ├── SettingsTextareaField.tsx        [Phase 0 — NEW]
-│   │   ├── SettingsSectionHeader.tsx        [Phase 0 — NEW]
+│   │   ├── Toggle.tsx                       [Phase 0 — NEW, true generic primitive]
+│   │   ├── StatCard.tsx                     [Phase 0 — NEW, generic, matches KpiCard precedent]
 │   │   └── index.ts                         [updated exports]
 │   ├── Subscriptions/
 │   │   ├── shared/
@@ -114,21 +109,24 @@ src/app/
 │   │   │   ├── CancellationReasonList.tsx   [Phase 0 — NEW]
 │   │   │   ├── RetentionOfferCard.tsx       [Phase 0 — NEW]
 │   │   │   ├── SubscriptionTimeline.tsx     [Phase 0 — NEW]
-│   │   │   └── RevenueGoalCard.tsx          [Phase 0 — NEW]
+│   │   │   ├── RevenueGoalCard.tsx          [Phase 0 — NEW]
+│   │   │   ├── SettingsField.tsx            [Phase 0 — NEW, moved from ui/ — scoped to the Subscriptions settings tab, not generic]
+│   │   │   ├── SettingsSelectField.tsx      [Phase 0 — NEW, moved from ui/]
+│   │   │   ├── SettingsToggleField.tsx      [Phase 0 — NEW, moved from ui/ — composes ui/Toggle]
+│   │   │   ├── SettingsTextareaField.tsx    [Phase 0 — NEW, moved from ui/]
+│   │   │   └── SettingsSectionHeader.tsx    [Phase 0 — NEW, moved from ui/]
 │   │   ├── SubscriptionsPage.tsx            [Phase 1 — rebuilt]
 │   │   ├── SubscriptionsTable.tsx           [Phase 1 — NEW, extracted]
 │   │   ├── SubscriptionsKpiStrip.tsx        [Phase 1 — NEW, extracted]
 │   │   ├── SubscriptionsFilterBar.tsx       [Phase 1 — NEW, extracted]
 │   │   ├── SubscriptionsBulkBar.tsx         [Phase 1 — NEW, extracted]
 │   │   ├── modals/
-│   │   │   ├── ChangePlanModal.tsx          [Phase 2 — extracted from existing inline]
-│   │   │   ├── ApplyDiscountModal.tsx       [Phase 2 — extracted from existing inline]
+│   │   │   ├── ChangePlanModal.tsx          [Phase 2 — extracted from existing inline, + timing toggle]
+│   │   │   ├── ApplyDiscountModal.tsx       [Phase 2 — extracted from existing inline, + bulk mode]
 │   │   │   ├── PaymentHistoryModal.tsx      [Phase 2 — extracted from existing inline]
-│   │   │   ├── CancellationFlowModal.tsx    [Phase 2 — NEW]
-│   │   │   ├── EarlyRenewalModal.tsx        [Phase 2 — NEW]
-│   │   │   ├── SkipCycleModal.tsx           [Phase 2 — NEW]
+│   │   │   ├── CancellationFlowModal.tsx    [Phase 2 — NEW, 3-step]
 │   │   │   ├── PauseDurationModal.tsx       [Phase 2 — NEW]
-│   │   │   └── ScaReauthModal.tsx           [Phase 2 — NEW]
+│   │   │   └── subscriptionDialogs.ts       [Phase 2 — NEW, config-builder functions for Early Renewal / Skip Cycle / SCA Reauth / Send Card Update — these reuse the shared `ConfirmDialog` ("Kind A" per 03 §0), not standalone modal components. Corrected from an earlier draft of this tree that listed them as separate `.tsx` modal files.]
 │   │   ├── SubscriptionDetailPage.tsx       [Phase 3 — NEW]
 │   │   ├── detail-tabs/
 │   │   │   ├── OverviewTab.tsx              [Phase 3 — NEW]
@@ -164,7 +162,7 @@ src/app/
 │   └── index.ts                             [NEW]
 ```
 
-**Component count:** ~53 new/extracted component files total (Phase 0: 17, Phase 1: 4, Phase 2: 8,
+**Component count:** ~53 new/extracted component files total (Phase 0: 17, Phase 1: 4, Phase 2: 6,
 Phase 3: 7, Phase 4: 3, Phase 5: 16 — the exact per-phase files are listed above; Phase 6 touches
 existing files only, no new components).
 
