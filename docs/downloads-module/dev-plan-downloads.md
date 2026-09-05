@@ -67,7 +67,6 @@
 public const DOWNLOAD_DELIVERY          = 'purecart_download_delivery';           // 'streaming'
 public const DOWNLOAD_MAX_COUNT         = 'purecart_download_max_count';          // 0 = unlimited
 public const DOWNLOAD_EXPIRY_DAYS       = 'purecart_download_expiry_days';        // 0 = never
-public const DOWNLOAD_EMAIL_EXPIRY_DAYS = 'purecart_download_email_expiry_days';  // 7
 public const DOWNLOAD_TRIGGER_STATUS    = 'purecart_download_trigger_status';     // 'completed'
 public const DOWNLOAD_LICENSE_GATE      = 'purecart_download_license_gate';       // true
 public const DOWNLOAD_LOG_RETENTION     = 'purecart_download_log_retention_months'; // 12
@@ -287,13 +286,15 @@ includes/Downloads/DownloadDispatcher.php
 এখন My Account এর link `home_url('purecart/' . $token)` — hardcoded, আর WooCommerce এর নিজের downloadable product গুলো এখনো `?download_file=` দিয়ে unprotected যায়।
 
 **কী করব:**
-- `woocommerce_downloadable_file_download_url` filter → PureCart token URL return
-- `woocommerce_customer_available_downloads` এ `AccountDownloadsMerger` আপডেট:
-  - নতুন `/purecart-download/` URL
-  - `downloads_remaining` = `max_downloads === 0` হলে "Unlimited" (এখন `0` দেখায়, ভুল)
-  - `file.name` = আসল file name (এখন product name বসছে)
-  - revoked/expired row হলে link এর বদলে badge
-- Order email এর link আলাদা expiry পাবে: `_purecart_email_link_expiry_days` → `OptionKeys::DOWNLOAD_EMAIL_EXPIRY_DAYS` (default 7)
+> **সংশোধন (বাস্তবায়নের সময়):** `woocommerce_downloadable_file_download_url` নামে WooCommerce এ কোনো filter নেই। আসল হুক দুটো — `woocommerce_customer_available_downloads` (My Account) আর `woocommerce_order_get_downloadable_items` (order email + order-received পেজ)।
+
+- দুটো ফিল্টারেই `AccountDownloadsMerger` — **যোগ নয়, প্রতিস্থাপন**। WooCommerce একই ফাইলের জন্য নিজের permission row বানায়, তাই আগের "append" আচরণে কাস্টমার প্রতিটা ফাইল দুবার দেখত: একবার আমাদের টোকেনে, একবার WooCommerce এর অরক্ষিত `?download_file=` লিংকে — refund এর পরেও
+  - native row এর URL → `/purecart-download/{token}`
+  - token revoked হলে native row **বাদ**, নাহলে revocation অকেজো থেকে যায়
+  - যেসব টোকেনের native জোড়া নেই, কেবল সেগুলো append
+  - `downloads_remaining` = unlimited হলে `''` (WooCommerce এর নিজস্ব ভাষা, টেমপ্লেট ∞ দেখায়); আগে `0` যেত, যার মানে "শেষ হয়ে গেছে"
+  - `file.name` = আসল file name
+- **Email link expiry বাদ।** ইমেইল আর My Account একই টোকেন; আলাদা expiry মানে প্রতি ফাইলে দ্বিতীয় টোকেন, নিজস্ব counter সহ — কাস্টমার কেনা limit এর দ্বিগুণ পেত। স্বল্পায়ু ইমেইল লিংকে নিরাপত্তাও বাড়ত না, কারণ দীর্ঘায়ু টোকেন My Account এ এক ক্লিক দূরে
 
 **Files:**
 
@@ -316,7 +317,9 @@ includes/Downloads/AccountDownloadsMerger.php
 ## Step 8 — Action Scheduler Cleanup Jobs
 
 **কী করব:**
-- `Downloads\Module` এ `add_action( 'purecart_cleanup_expired_tokens', ... )` — expired + ৩০ দিনের পুরনো revoked row delete; log row থাকবে
+> **সংশোধন (বাস্তবায়নের সময়):** "expired + revoked row delete" করা **যাবে না**। Step 7 এর পর token row-ই সেই জিনিস যার সাথে মিলিয়ে `AccountDownloadsMerger` WooCommerce এর native row এর অরক্ষিত URL বদলায়, আর revoked হলে ওই row লুকায়। Token মুছে দিলে মিল ভেঙে যায় → WooCommerce এর নিজের row নিজের লিংক নিয়ে ফিরে আসে, অর্থাৎ expired/refunded ফাইল আবার ডাউনলোডযোগ্য হয়ে যায়। row রাখতে খরচ কয়েক বাইট, মুছলে ফাইল খুলে যায়।
+
+- `Downloads\Module` এ `add_action( 'purecart_cleanup_expired_tokens', ... )` — শুধু **orphan** token delete (যে order টাই আর নেই), ব্যাচে ২০০, ৩০ দিনের grace। expired/revoked row থেকে যাবে
 - নতুন job `purecart_cleanup_download_logs` (monthly) → `DownloadLogger::prune( DOWNLOAD_LOG_RETENTION )`
 - `Activator::schedule_jobs()` এ register, `Activator::deactivate()` এ `as_unschedule_all_actions()`
 
@@ -382,7 +385,6 @@ Fields:
 |---|---|---|
 | `_purecart_download_limit` | number | `0` (unlimited) |
 | `_purecart_download_expiry_days` | number | `0` (never) |
-| `_purecart_email_link_expiry_days` | number | `7` |
 | `_purecart_download_license_gate` | checkbox | `true` |
 | `_purecart_allow_link_regen` | checkbox | `false` |
 
