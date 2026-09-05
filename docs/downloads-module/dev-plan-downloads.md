@@ -428,17 +428,17 @@ includes/Downloads/Module.php                ← is_admin() এ instantiate
 
 | Step | কাজ | অবস্থা |
 |---|---|---|
-| 1 | Schema upgrade + OptionKeys | ⬜ |
-| 2 | Module bootstrap + Plugin wiring | ⬜ |
-| 3 | TokenManager rewrite (multi-file) | ⬜ |
-| 4 | OrderHandler + revocation | ⬜ |
-| 5 | DownloadLogger + DownloadDelivery | ⬜ |
-| 6 | Validation result + license gate | ⬜ |
-| 7 | WooCommerce URL filter + emails | ⬜ |
-| 8 | Cleanup jobs | ⬜ |
-| 9 | REST API | ⬜ |
-| 10 | Product data tab | ⬜ |
-| 11 | Final integration test | ⬜ |
+| 1 | Schema upgrade + OptionKeys | ✅ |
+| 2 | Module bootstrap + Plugin wiring | ✅ |
+| 3 | TokenManager rewrite (multi-file) | ✅ |
+| 4 | OrderHandler + revocation | ✅ |
+| 5 | DownloadLogger + DownloadDelivery | ✅ |
+| 6 | Validation result + license gate | ✅ |
+| 7 | WooCommerce URL filter + emails | ✅ |
+| 8 | Cleanup jobs | ✅ |
+| 9 | REST API | ✅ |
+| 10 | Product data tab | ✅ |
+| 11 | Final integration test | ✅ |
 
 ---
 
