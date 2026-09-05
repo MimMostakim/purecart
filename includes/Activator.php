@@ -36,8 +36,8 @@ class Activator {
 	/** DB version option key. */
 	private const DB_VERSION_KEY = 'purecart_db_version';
 
-	/** Current DB schema version. 1.4.0 — Secure Downloads columns on purecart_downloads + purecart_download_logs. */
-	private const DB_VERSION = '1.4.0';
+	/** Current DB schema version. 1.4.2 — Secure Downloads columns, plus the download-log cleanup job. */
+	private const DB_VERSION = '1.4.2';
 
 	/** Action Scheduler group for all plugin jobs. */
 	private const AS_GROUP = 'purecart';
@@ -66,6 +66,7 @@ class Activator {
 		as_unschedule_all_actions( 'purecart_process_dunning', array(), self::AS_GROUP );
 		as_unschedule_all_actions( 'purecart_scan_due_renewals', array(), self::AS_GROUP );
 		as_unschedule_all_actions( 'purecart_cleanup_expired_tokens', array(), self::AS_GROUP );
+		as_unschedule_all_actions( 'purecart_cleanup_download_logs', array(), self::AS_GROUP );
 		flush_rewrite_rules();
 	}
 
@@ -97,8 +98,17 @@ class Activator {
 		( new SaasAccounts() )->create();
 	}
 
-	/** Schedule recurring Action Scheduler jobs. */
-	private static function schedule_jobs(): void {
+	/**
+	 * Schedule recurring Action Scheduler jobs.
+	 *
+	 * Every branch is guarded by as_next_scheduled_action(), so this is safe
+	 * to call more than once. Must not run before Action Scheduler has
+	 * initialised — see maybe_upgrade().
+	 *
+	 * @since 1.0.0
+	 * @return void
+	 */
+	public static function schedule_jobs(): void {
 		if ( false === as_next_scheduled_action( 'purecart_check_expired_licenses', array(), self::AS_GROUP ) ) {
 			as_schedule_recurring_action(
 				time(),
@@ -128,6 +138,18 @@ class Activator {
 				self::AS_GROUP
 			);
 		}
+
+		// Monthly: the download log only needs trimming to a retention window
+		// measured in months, so a daily pass would be almost entirely no-ops.
+		if ( false === as_next_scheduled_action( 'purecart_cleanup_download_logs', array(), self::AS_GROUP ) ) {
+			as_schedule_recurring_action(
+				time(),
+				MONTH_IN_SECONDS,
+				'purecart_cleanup_download_logs',
+				array(),
+				self::AS_GROUP
+			);
+		}
 	}
 
 	/**
@@ -141,6 +163,18 @@ class Activator {
 
 		if ( version_compare( (string) $stored, self::DB_VERSION, '<' ) ) {
 			self::create_tables();
+
+			// Jobs, not just tables: activate() is the only other caller of
+			// schedule_jobs(), so a recurring job added in a plugin update
+			// would never be scheduled on a site that simply updated in place
+			// rather than deactivating and reactivating.
+			//
+			// Deferred rather than called here: this runs from Plugin::init()
+			// on plugins_loaded, while Action Scheduler only initialises on
+			// init. Scheduling before its data store exists fails silently —
+			// the job simply never appears.
+			add_action( 'action_scheduler_init', array( self::class, 'schedule_jobs' ) );
+
 			update_option( self::DB_VERSION_KEY, self::DB_VERSION );
 		}
 	}
