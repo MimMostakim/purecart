@@ -443,36 +443,76 @@ class TokenManager {
 	}
 
 	/**
-	 * Retrieve the usable download tokens for a customer, newest first.
+	 * Retrieve a customer's download tokens, newest first.
 	 *
-	 * Revoked rows are left out: they are what a refunded or cancelled order
-	 * leaves behind, and surfacing them would put a button in My Account that
-	 * can only ever answer 403.
+	 * Revoked rows are excluded by default — they are what a refunded or
+	 * cancelled order leaves behind, and listing one would put a button in
+	 * front of the customer that can only ever answer 403. A caller that has
+	 * to *account* for them rather than display them (see
+	 * {@see AccountDownloadsMerger}, which uses a revoked token to suppress
+	 * WooCommerce's own unprotected row) asks for them explicitly.
 	 *
 	 * @since  1.0.0
-	 * @param  int $user_id WordPress user ID.
-	 * @return array<int, object> Rows, each carrying `product_name` and `file_name`.
+	 * @param  int  $user_id         WordPress user ID.
+	 * @param  bool $include_revoked Whether to return revoked rows too.
+	 * @return array<int, object>    Rows, each carrying `product_name` and `file_name`.
 	 */
-	public function get_by_user( int $user_id ): array {
+	public function get_by_user( int $user_id, bool $include_revoked = false ): array {
 		global $wpdb;
 
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table; results vary per user and update on every download, making persistent caching unreliable.
+		$status_clause = $include_revoked ? '' : " AND d.status = 'active'";
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table; $status_clause is one of two fixed literals, and the user ID is a placeholder. Results change on every download, so persistent caching would go stale.
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT d.*, p.post_title AS product_name
                    FROM {$wpdb->prefix}purecart_downloads d
                    LEFT JOIN {$wpdb->posts} p ON p.ID = d.product_id
-                  WHERE d.user_id = %d
-                    AND d.status = 'active'
+                  WHERE d.user_id = %d {$status_clause}
                   ORDER BY d.created_at DESC",
 				$user_id
 			)
 		);
 
-		if ( ! $rows ) {
-			return array();
-		}
+		return $this->with_file_names( $rows ?: array() );
+	}
 
+	/**
+	 * Retrieve the download tokens issued for one order.
+	 *
+	 * @since  1.0.0
+	 * @param  int  $order_id        WooCommerce order ID.
+	 * @param  bool $include_revoked Whether to return revoked rows too.
+	 * @return array<int, object>    Rows, each carrying `product_name` and `file_name`.
+	 */
+	public function get_by_order( int $order_id, bool $include_revoked = false ): array {
+		global $wpdb;
+
+		$status_clause = $include_revoked ? '' : " AND d.status = 'active'";
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table; $status_clause is one of two fixed literals, and the order ID is a placeholder. Results change on every download, so persistent caching would go stale.
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT d.*, p.post_title AS product_name
+                   FROM {$wpdb->prefix}purecart_downloads d
+                   LEFT JOIN {$wpdb->posts} p ON p.ID = d.product_id
+                  WHERE d.order_id = %d {$status_clause}
+                  ORDER BY d.created_at DESC",
+				$order_id
+			)
+		);
+
+		return $this->with_file_names( $rows ?: array() );
+	}
+
+	/**
+	 * Attach each row's WooCommerce file name, falling back to the product's.
+	 *
+	 * @since  1.0.0
+	 * @param  array<int, object> $rows Token rows.
+	 * @return array<int, object>
+	 */
+	private function with_file_names( array $rows ): array {
 		foreach ( $rows as $row ) {
 			$file           = $this->file_for( $row );
 			$row->file_name = $file ? $file->get_name() : (string) ( $row->product_name ?? '' );

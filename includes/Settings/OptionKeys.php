@@ -116,8 +116,13 @@ class OptionKeys {
 	/** Store-wide default token lifetime in days from order completion; 0 = never expires (default 0). */
 	public const DOWNLOAD_EXPIRY_DAYS = 'purecart_download_expiry_days';
 
-	/** Lifetime in days of the download links embedded in order emails (default 7). */
-	public const DOWNLOAD_EMAIL_EXPIRY_DAYS = 'purecart_download_email_expiry_days';
+	// A separate, shorter expiry for the links inside order emails was
+	// considered and dropped. The email and the My Account row are the same
+	// token, so a second expiry means a second token per file — with its own
+	// counter, handing the customer twice the download limit they paid for,
+	// and showing support two rows per file. A short-lived email link would
+	// also buy little: the long-lived token is still one click away in My
+	// Account. One token, one expiry, one counter.
 
 	/**
 	 * Order status that triggers download token creation: 'completed' | 'processing' | 'both'
