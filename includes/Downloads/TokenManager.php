@@ -273,10 +273,15 @@ class TokenManager {
 			return true;
 		}
 
-		$meta    = get_post_meta( (int) $row->product_id, '_purecart_download_license_gate', true );
-		$enabled = ( '' === $meta || null === $meta )
-			? (bool) Settings::get( OptionKeys::DOWNLOAD_LICENSE_GATE, true )
-			: (bool) $meta;
+		$meta = get_post_meta( (int) $row->product_id, '_purecart_download_license_gate', true );
+
+		// wc_string_to_bool(), not a cast: the product meta stores WooCommerce's
+		// own 'yes'/'no' strings, and (bool) 'no' is true — which would turn
+		// "licence not required" into "licence required" and refuse downloads
+		// the shop owner had explicitly opened up.
+		$enabled = in_array( $meta, array( 'yes', 'no' ), true )
+			? wc_string_to_bool( (string) $meta )
+			: (bool) Settings::get( OptionKeys::DOWNLOAD_LICENSE_GATE, true );
 
 		if ( ! $enabled ) {
 			return true;

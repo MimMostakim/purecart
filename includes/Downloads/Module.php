@@ -63,6 +63,10 @@ class Module {
 
 		( new DownloadsApi() )->register();
 
+		if ( is_admin() ) {
+			new ProductDownloadsTab();
+		}
+
 		// Priority 20: after DownloadDispatcher's own init-hooked add_rewrite(),
 		// so the rules exist before the flush happens.
 		add_action( 'init', array( $this, 'maybe_flush_rewrites' ), 20 );
