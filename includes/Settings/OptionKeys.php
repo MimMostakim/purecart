@@ -104,4 +104,34 @@ class OptionKeys {
 
 	/** HS256 secret used to sign license JWTs. Auto-generated on first use if unset and PURECART_JWT_SECRET_KEY isn't defined. */
 	public const LICENSE_JWT_SECRET = 'purecart_jwt_secret_key';
+
+	// ─── Secure Downloads module ───────────────────────────────────────────────
+
+	/** How protected files are sent: 'streaming' (default). Phase 2 adds xsendfile, xaccel, s3, r2. */
+	public const DOWNLOAD_DELIVERY = 'purecart_download_delivery';
+
+	/** Store-wide default download limit per file; 0 = unlimited (default 0). */
+	public const DOWNLOAD_MAX_COUNT = 'purecart_download_max_count';
+
+	/** Store-wide default token lifetime in days from order completion; 0 = never expires (default 0). */
+	public const DOWNLOAD_EXPIRY_DAYS = 'purecart_download_expiry_days';
+
+	/** Lifetime in days of the download links embedded in order emails (default 7). */
+	public const DOWNLOAD_EMAIL_EXPIRY_DAYS = 'purecart_download_email_expiry_days';
+
+	/**
+	 * Order status that triggers download token creation: 'completed' | 'processing' | 'both'
+	 * (default 'completed'). Deliberately separate from LICENSE_DELIVERY_STATUS — plenty of
+	 * stores hand over the file as soon as payment clears but issue the license key later.
+	 */
+	public const DOWNLOAD_TRIGGER_STATUS = 'purecart_download_trigger_status';
+
+	/** Whether an active license is required before a file is served, when Licensing is in play (default true). */
+	public const DOWNLOAD_LICENSE_GATE = 'purecart_download_license_gate';
+
+	/** Months of download log history to keep before pruning (default 12). */
+	public const DOWNLOAD_LOG_RETENTION = 'purecart_download_log_retention_months';
+
+	/** Whether customers may regenerate their own expired download links from My Account (default false). */
+	public const DOWNLOAD_ALLOW_LINK_REGEN = 'purecart_download_allow_link_regen';
 }
