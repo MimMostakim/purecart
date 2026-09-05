@@ -39,6 +39,20 @@ class OrderHandler {
 		if ( in_array( $delivery_status, array( 'processing', 'both' ), true ) ) {
 			add_action( 'woocommerce_order_status_processing', array( $this, 'on_order_complete' ), 10, 1 );
 		}
+
+		// Download tokens run on their own trigger, deliberately: plenty of
+		// stores hand over the file the moment payment clears but only issue
+		// the license key once the order is marked completed. Like
+		// on_order_complete(), issue_downloads() is idempotent, so 'both' can
+		// safely fire on either transition.
+		$download_status = Settings::get( OptionKeys::DOWNLOAD_TRIGGER_STATUS, 'completed' );
+		if ( in_array( $download_status, array( 'completed', 'both' ), true ) ) {
+			add_action( 'woocommerce_order_status_completed', array( $this, 'issue_downloads' ), 10, 1 );
+		}
+		if ( in_array( $download_status, array( 'processing', 'both' ), true ) ) {
+			add_action( 'woocommerce_order_status_processing', array( $this, 'issue_downloads' ), 10, 1 );
+		}
+
 		add_action( 'woocommerce_order_status_refunded', array( $this, 'on_order_refunded' ), 10, 1 );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'on_order_cancelled' ), 10, 1 );
 		add_action( 'woocommerce_subscription_status_cancelled', array( $this, 'on_subscription_cancelled' ), 10, 1 );
@@ -49,7 +63,10 @@ class OrderHandler {
 	}
 
 	/**
-	 * Provision licenses, downloads, and SaaS accounts when an order is completed.
+	 * Provision licenses and SaaS accounts when an order is completed.
+	 *
+	 * Download tokens are issued separately by {@see self::issue_downloads()},
+	 * which runs on its own configurable order status.
 	 *
 	 * @since  1.0.0
 	 * @param  int $order_id WooCommerce order ID.
@@ -98,10 +115,6 @@ class OrderHandler {
 				}
 			}
 
-			if ( 'purecart_plugin' === $type || 'purecart_bundle' === $type ) {
-				( new TokenManager() )->create_token( $order_id, $user_id, $product_id );
-			}
-
 			if ( 'purecart_saas' === $type ) {
 				( new AccountProvisioner() )->provision( $order_id, $user_id, $product_id );
 			}
@@ -111,7 +124,39 @@ class OrderHandler {
 	}
 
 	/**
-	 * Suspend licenses and SaaS accounts when an order is refunded.
+	 * Issue secure download tokens for every downloadable file in an order.
+	 *
+	 * Membership of a PureCart product type is not the test — whether the
+	 * product actually carries files is. A plain WooCommerce downloadable
+	 * product bought from a PureCart store should be protected by the same
+	 * expiring, counted, revocable links as a PureCart plugin.
+	 *
+	 * @since  1.0.0
+	 * @param  int $order_id WooCommerce order ID.
+	 * @return void
+	 */
+	public function issue_downloads( int $order_id ): void {
+		$order = wc_get_order( $order_id );
+		if ( ! $order ) {
+			return;
+		}
+
+		$manager = new TokenManager();
+
+		foreach ( $order->get_items() as $item ) {
+			if ( ! $item instanceof \WC_Order_Item_Product ) {
+				continue;
+			}
+
+			$manager->create_for_order_item( $item );
+		}
+
+		do_action( 'purecart_order_downloads_issued', $order_id );
+	}
+
+	/**
+	 * Suspend licenses and SaaS accounts, and revoke download links, when an
+	 * order is refunded.
 	 *
 	 * @since  1.0.0
 	 * @param  int $order_id WooCommerce order ID.
@@ -119,11 +164,13 @@ class OrderHandler {
 	 */
 	public function on_order_refunded( int $order_id ): void {
 		$this->suspend_by_order( $order_id, 'refunded' );
+		( new TokenManager() )->revoke_by_order( $order_id );
 		do_action( 'purecart_order_refunded', $order_id );
 	}
 
 	/**
-	 * Suspend licenses and SaaS accounts when an order is cancelled.
+	 * Suspend licenses and SaaS accounts, and revoke download links, when an
+	 * order is cancelled.
 	 *
 	 * @since  1.0.0
 	 * @param  int $order_id WooCommerce order ID.
@@ -131,6 +178,7 @@ class OrderHandler {
 	 */
 	public function on_order_cancelled( int $order_id ): void {
 		$this->suspend_by_order( $order_id, 'cancelled' );
+		( new TokenManager() )->revoke_by_order( $order_id );
 		do_action( 'purecart_order_cancelled', $order_id );
 	}
 

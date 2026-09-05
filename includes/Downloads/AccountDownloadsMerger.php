@@ -73,8 +73,8 @@ class AccountDownloadsMerger {
 	 * native one.
 	 *
 	 * The one deliberate difference is `download_url`: it still points at
-	 * PureCart's own signed-token endpoint ({@see DownloadDispatcher}, the
-	 * `purecart/{token}` rewrite) rather than WooCommerce's native
+	 * PureCart's own signed-token endpoint ({@see DownloadDispatcher::url()},
+	 * the `purecart-download/{token}` rewrite) rather than WooCommerce's native
 	 * `?download_file=` handler, since the underlying file was never
 	 * registered as a WooCommerce downloadable product file — it's tracked
 	 * in PureCart's own `purecart_downloads` table instead. Clicking the
@@ -93,7 +93,7 @@ class AccountDownloadsMerger {
 		$product_name = (string) ( $download->product_name ?? '' );
 
 		return array(
-			'download_url'        => home_url( 'purecart/' . $download->token ),
+			'download_url'        => DownloadDispatcher::url( (string) $download->token ),
 			'download_id'         => 'purecart-' . (int) $download->id,
 			'product_id'          => (int) $download->product_id,
 			'product_name'        => $product_name,
