@@ -1,0 +1,244 @@
+{
+	"info": {
+		"name": "PureCart Secure Downloads API",
+		"description": "PureCart Secure Downloads ব্যাকএন্ড QA-র জন্য। Import করার পর Variables ট্যাবে base_url, admin_user, admin_pass সেট করুন (Application Password ব্যবহার করুন, লগইন পাসওয়ার্ড নয়)। সব /downloads রুট manage_woocommerce ক্ষমতা চায়; token URL-টাই একমাত্র কাস্টমার-মুখী endpoint, আর সেটা JSON নয় — ফাইল stream করে।",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "basic",
+		"basic": [
+			{ "key": "username", "value": "{{admin_user}}", "type": "string" },
+			{ "key": "password", "value": "{{admin_pass}}", "type": "string" }
+		]
+	},
+	"variable": [
+		{ "key": "base_url", "value": "http://127.0.0.1:10004", "description": "Local-এর nginx সরাসরি এই পোর্টে শোনে। woodigital.local ব্যবহার করবেন না — hosts ফাইলে নেই, Postman resolve করতে পারবে না।" },
+		{ "key": "admin_user", "value": "", "description": "অ্যাডমিন ইউজারনেম" },
+		{ "key": "admin_pass", "value": "", "description": "Users → Profile → Application Passwords থেকে বানানো" },
+		{ "key": "download_id", "value": "1", "description": "wp_purecart_downloads টেবিলের একটা row ID" },
+		{ "key": "token", "value": "", "description": "পুরো ৬৪-hex token — ফাইল ডাউনলোড টেস্টের জন্য (API response এ শুধু শেষ ৮ char আসে)" }
+	],
+	"item": [
+		{
+			"name": "1. পড়া (Read)",
+			"item": [
+				{
+					"name": "সব download token",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/wp-json/purecart/v1/downloads",
+							"host": [ "{{base_url}}" ],
+							"path": [ "wp-json", "purecart", "v1", "downloads" ],
+							"query": [
+								{ "key": "status", "value": "active", "disabled": true, "description": "active | expired | exhausted | revoked" },
+								{ "key": "search", "value": "", "disabled": true, "description": "product title, customer name/email, বা order ID" },
+								{ "key": "product_id", "value": "", "disabled": true },
+								{ "key": "user_id", "value": "", "disabled": true },
+								{ "key": "order_id", "value": "", "disabled": true },
+								{ "key": "orderby", "value": "created_at", "disabled": true, "description": "created_at | expires_at | download_count | product_name | order_id" },
+								{ "key": "order", "value": "desc", "disabled": true },
+								{ "key": "page", "value": "1", "disabled": true },
+								{ "key": "per_page", "value": "20", "disabled": true }
+							]
+						},
+						"description": "X-WP-Total আর X-WP-TotalPages হেডারে pagination আসে। status একটা derived মান — টেবিলে শুধু active/revoked থাকে, expired আর exhausted বের করা হয় expiry ও counter থেকে।"
+					}
+				},
+				{
+					"name": "একটা download + তার log",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/wp-json/purecart/v1/downloads/{{download_id}}",
+							"host": [ "{{base_url}}" ],
+							"path": [ "wp-json", "purecart", "v1", "downloads", "{{download_id}}" ]
+						},
+						"description": "response এ logs অ্যারে থাকে — সাম্প্রতিক ৫০টা ঘটনা।"
+					}
+				},
+				{
+					"name": "Stats (overview tile)",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/wp-json/purecart/v1/downloads/stats",
+							"host": [ "{{base_url}}" ],
+							"path": [ "wp-json", "purecart", "v1", "downloads", "stats" ]
+						}
+					}
+				},
+				{
+					"name": "Audit log",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/wp-json/purecart/v1/downloads/logs",
+							"host": [ "{{base_url}}" ],
+							"path": [ "wp-json", "purecart", "v1", "downloads", "logs" ],
+							"query": [
+								{ "key": "download_id", "value": "", "disabled": true },
+								{ "key": "event", "value": "served", "disabled": true, "description": "served | rejected_invalid | rejected_revoked | rejected_expired | rejected_limit | rejected_license | rejected_missing" },
+								{ "key": "date_from", "value": "", "disabled": true, "description": "YYYY-MM-DD HH:MM:SS" },
+								{ "key": "date_to", "value": "", "disabled": true },
+								{ "key": "page", "value": "1", "disabled": true },
+								{ "key": "per_page", "value": "50", "disabled": true }
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "2. লেখা (Write)",
+			"item": [
+				{
+					"name": "Limit / expiry বদলানো",
+					"request": {
+						"method": "PATCH",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"max_downloads\": 5,\n  \"expires_at\": \"2027-01-01 00:00:00\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/wp-json/purecart/v1/downloads/{{download_id}}",
+							"host": [ "{{base_url}}" ],
+							"path": [ "wp-json", "purecart", "v1", "downloads", "{{download_id}}" ]
+						},
+						"description": "max_downloads 0 = unlimited। expires_at খালি স্ট্রিং দিলে expiry মুছে যায় (never)। যেটা পাঠাবেন না, সেটা অপরিবর্তিত থাকে। সাপোর্টের কাজ এটাই — নতুন token না দিয়ে একটা বাড়তি ডাউনলোড দেওয়া, যাতে কাস্টমারের ইনবক্সের পুরনো লিংক নষ্ট না হয়।"
+					}
+				},
+				{
+					"name": "Revoke",
+					"request": {
+						"method": "POST",
+						"url": {
+							"raw": "{{base_url}}/wp-json/purecart/v1/downloads/{{download_id}}/revoke",
+							"host": [ "{{base_url}}" ],
+							"path": [ "wp-json", "purecart", "v1", "downloads", "{{download_id}}", "revoke" ]
+						},
+						"description": "row মোছে না, status = revoked করে। এরপর token URL 410 দেবে, আর My Account থেকেও সারিটা উধাও হবে (WooCommerce এর নিজের অরক্ষিত সারি সহ)।"
+					}
+				},
+				{
+					"name": "Regenerate",
+					"request": {
+						"method": "POST",
+						"url": {
+							"raw": "{{base_url}}/wp-json/purecart/v1/downloads/{{download_id}}/regenerate",
+							"host": [ "{{base_url}}" ],
+							"path": [ "wp-json", "purecart", "v1", "downloads", "{{download_id}}", "regenerate" ]
+						},
+						"description": "নতুন token, counter শূন্য, expiry বর্তমান সেটিং থেকে নতুন করে হিসাব। পুরনো লিংক সঙ্গে সঙ্গে অকেজো।"
+					}
+				}
+			]
+		},
+		{
+			"name": "3. Settings",
+			"item": [
+				{
+					"name": "Settings পড়া",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/wp-json/purecart/v1/downloads/settings",
+							"host": [ "{{base_url}}" ],
+							"path": [ "wp-json", "purecart", "v1", "downloads", "settings" ]
+						}
+					}
+				},
+				{
+					"name": "Settings সেভ",
+					"request": {
+						"method": "POST",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"max_count\": 0,\n  \"expiry_days\": 0,\n  \"trigger_status\": \"completed\",\n  \"license_gate\": true,\n  \"log_retention\": 12,\n  \"allow_link_regen\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/wp-json/purecart/v1/downloads/settings",
+							"host": [ "{{base_url}}" ],
+							"path": [ "wp-json", "purecart", "v1", "downloads", "settings" ]
+						},
+						"description": "যে key পাঠাবেন কেবল সেটাই লেখা হয়, বাকিগুলো ছোঁয়া হয় না। trigger_status: completed | processing | both। delivery এখন শুধু streaming (বাকিগুলো Phase 2)।"
+					}
+				}
+			]
+		},
+		{
+			"name": "4. নেতিবাচক কেস",
+			"item": [
+				{
+					"name": "অস্তিত্বহীন download → 404",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/wp-json/purecart/v1/downloads/99999",
+							"host": [ "{{base_url}}" ],
+							"path": [ "wp-json", "purecart", "v1", "downloads", "99999" ]
+						}
+					}
+				},
+				{
+					"name": "ভুল enum → 400",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/wp-json/purecart/v1/downloads?status=bogus",
+							"host": [ "{{base_url}}" ],
+							"path": [ "wp-json", "purecart", "v1", "downloads" ],
+							"query": [ { "key": "status", "value": "bogus" } ]
+						},
+						"description": "rest_invalid_param আসা চাই। orderby তেও একই — ORDER BY তে placeholder বসে না, তাই allowlist-ই একমাত্র নিরাপদ পথ।"
+					}
+				},
+				{
+					"name": "লগইন ছাড়া → 401",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/wp-json/purecart/v1/downloads",
+							"host": [ "{{base_url}}" ],
+							"path": [ "wp-json", "purecart", "v1", "downloads" ]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "5. আসল ফাইল ডাউনলোড (JSON নয়)",
+			"item": [
+				{
+					"name": "Token URL",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/purecart-download/{{token}}",
+							"host": [ "{{base_url}}" ],
+							"path": [ "purecart-download", "{{token}}" ]
+						},
+						"description": "সক্রিয় token → 200 + ফাইল। revoked/expired/limit শেষ → 410। অস্তিত্বহীন token → 403। Range হেডার দিলে 206 আসবে আর counter বাড়বে না — resume করা মানে একই ডাউনলোড চালিয়ে যাওয়া।"
+					}
+				},
+				{
+					"name": "Range request → 206",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"header": [ { "key": "Range", "value": "bytes=0-99" } ],
+						"url": {
+							"raw": "{{base_url}}/purecart-download/{{token}}",
+							"host": [ "{{base_url}}" ],
+							"path": [ "purecart-download", "{{token}}" ]
+						}
+					}
+				}
+			]
+		}
+	]
+}

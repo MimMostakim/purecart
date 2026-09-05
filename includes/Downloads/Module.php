@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace PureCart\Downloads;
 
+use PureCart\API\Downloads as DownloadsApi;
 use PureCart\Settings\OptionKeys;
 use PureCart\Settings\Settings;
 
@@ -59,6 +60,8 @@ class Module {
 		new DownloadDispatcher();
 
 		new AccountDownloadsMerger();
+
+		( new DownloadsApi() )->register();
 
 		// Priority 20: after DownloadDispatcher's own init-hooked add_rewrite(),
 		// so the rules exist before the flush happens.

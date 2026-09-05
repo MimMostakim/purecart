@@ -422,6 +422,55 @@ class TokenManager {
 	}
 
 	/**
+	 * Adjust an existing token's limit and expiry.
+	 *
+	 * The support-desk operation: a customer who genuinely lost their file to
+	 * a dead disk needs one more download, not a fresh token that resets the
+	 * counter and invalidates the link already in their inbox.
+	 *
+	 * @since  1.0.0
+	 * @param  int         $download_id   The purecart_downloads row ID.
+	 * @param  int|null    $max_downloads New limit, 0 for unlimited, null to leave alone.
+	 * @param  string|null $expires_at    New expiry as a MySQL datetime, '' for never, null to leave alone.
+	 * @return object|null                The updated row, or null when it does not exist.
+	 */
+	public function update_limits( int $download_id, ?int $max_downloads = null, ?string $expires_at = null ): ?object {
+		global $wpdb;
+
+		if ( ! $this->get( $download_id ) ) {
+			return null;
+		}
+
+		$data    = array();
+		$formats = array();
+
+		if ( null !== $max_downloads ) {
+			$data['max_downloads'] = max( 0, $max_downloads );
+			$formats[]             = '%d';
+		}
+
+		if ( null !== $expires_at ) {
+			$data['expires_at'] = '' === $expires_at ? null : $expires_at;
+			$formats[]          = '%s';
+		}
+
+		if ( ! $data ) {
+			return $this->get( $download_id );
+		}
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table UPDATE; no WP API available.
+		$wpdb->update(
+			$wpdb->prefix . 'purecart_downloads',
+			$data,
+			array( 'id' => $download_id ),
+			$formats,
+			array( '%d' )
+		);
+
+		return $this->get( $download_id );
+	}
+
+	/**
 	 * Fetch a single download row by ID.
 	 *
 	 * @since  1.0.0
