@@ -103,9 +103,16 @@ class OrderHandler {
 			}
 
 			if ( 'purecart_saas' === $type ) {
-				( new AccountProvisioner() )->provision( $order_id, $user_id, $product_id );
+				( new AccountProvisioner() )->provision_for_order_item( $item, $order_id, $user_id, $product_id );
 			}
 		}
+
+		// Covers an order that returns to 'completed' after having been
+		// refunded/cancelled (e.g. a disputed refund reversed) — any SaaS
+		// account tied to this order's items is brought back to active.
+		// A no-op for the common case: activate() on an already-active
+		// account updates zero rows, so no duplicate webhook fires.
+		$this->reactivate_by_order( $order_id );
 
 		do_action( 'purecart_order_provisioned', $order_id );
 	}
@@ -202,6 +209,12 @@ class OrderHandler {
 	/**
 	 * Suspend licenses and SaaS accounts associated with an order.
 	 *
+	 * SaaS accounts are suspended one at a time through
+	 * {@see AccountProvisioner::suspend()} — not a bulk `$wpdb->update()` —
+	 * so each account's suspend webhook actually fires. A direct SQL update
+	 * would flip the DB row silently and leave the merchant's SaaS backend
+	 * unaware the account should stop serving the customer.
+	 *
 	 * @since  1.0.0
 	 * @param  int    $order_id WooCommerce order ID.
 	 * @param  string $reason   Reason string passed to the action hook.
@@ -222,15 +235,50 @@ class OrderHandler {
 			array( '%d' )
 		);
 
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Bulk status update on refund/cancellation; must be immediate.
-		$wpdb->update(
-			$wpdb->prefix . 'purecart_saas_accounts',
-			array( 'status' => 'suspended' ),
-			array( 'order_id' => $order_id ),
-			array( '%s' ),
-			array( '%d' )
-		);
+		$provisioner = new AccountProvisioner();
+		foreach ( $this->saas_account_ids_for_order( $order_id ) as $account_id ) {
+			$provisioner->suspend( $account_id );
+		}
 
 		do_action( 'purecart_order_suspended', $order_id, $reason );
+	}
+
+	/**
+	 * Re-activate every SaaS account tied to an order's items.
+	 *
+	 * @since  1.0.0
+	 * @param  int $order_id WooCommerce order ID.
+	 * @return void
+	 */
+	private function reactivate_by_order( int $order_id ): void {
+		$provisioner = new AccountProvisioner();
+		foreach ( $this->saas_account_ids_for_order( $order_id ) as $account_id ) {
+			$provisioner->activate( $account_id );
+		}
+	}
+
+	/**
+	 * Collect the `_purecart_saas_account_id` order-item meta for every item
+	 * on an order — the set of SaaS accounts provisioned from it.
+	 *
+	 * @since  1.0.0
+	 * @param  int $order_id WooCommerce order ID.
+	 * @return array<int, int>
+	 */
+	private function saas_account_ids_for_order( int $order_id ): array {
+		$order = wc_get_order( $order_id );
+		if ( ! $order ) {
+			return array();
+		}
+
+		$account_ids = array();
+		foreach ( $order->get_items() as $item ) {
+			$account_id = (int) $item->get_meta( '_purecart_saas_account_id', true );
+			if ( $account_id > 0 ) {
+				$account_ids[] = $account_id;
+			}
+		}
+
+		return $account_ids;
 	}
 }

@@ -104,4 +104,21 @@ class OptionKeys {
 
 	/** HS256 secret used to sign license JWTs. Auto-generated on first use if unset and PURECART_JWT_SECRET_KEY isn't defined. */
 	public const LICENSE_JWT_SECRET = 'purecart_jwt_secret_key';
+
+	// ─── SaaS Provisioning module ──────────────────────────────────────────────
+
+	/** URL of the merchant's SaaS platform provisioning endpoint (default ''). */
+	public const SAAS_WEBHOOK_URL = 'purecart_saas_webhook_url';
+
+	/** HMAC-SHA256 secret used to sign outbound SaaS webhooks. Auto-generated on first send if unset. */
+	public const SAAS_WEBHOOK_SECRET = 'purecart_saas_webhook_secret';
+
+	/** HS256 secret used to sign SaaS login JWTs. Auto-generated on first issue if unset. */
+	public const SAAS_JWT_SECRET = 'purecart_saas_jwt_secret';
+
+	/** SaaS access token lifetime in seconds (default 600 — 10 minutes). */
+	public const SAAS_JWT_EXPIRY_SECONDS = 'purecart_saas_jwt_expiry_seconds';
+
+	/** SaaS refresh token lifetime in seconds (default 2592000 — 30 days). */
+	public const SAAS_JWT_REFRESH_SECONDS = 'purecart_saas_jwt_refresh_seconds';
 }

@@ -19,7 +19,9 @@ use PureCart\Downloads\AccountDownloadsMerger;
 use PureCart\Admin\Admin;
 use PureCart\Subscriptions\Module as SubscriptionsModule;
 use PureCart\Updates\Module as UpdatesModule;
+use PureCart\SaaS\Module as SaasModule;
 use PureCart\CLI\LicenseCommands;
+use PureCart\CLI\SaasCommands;
 use PureCart\Licensing\JwtHooks;
 
 /**
@@ -65,6 +67,7 @@ final class Plugin {
 		new AccountDownloadsMerger();
 		new SubscriptionsModule();
 		new UpdatesModule();
+		new SaasModule();
 		new JwtHooks();
 
 		if ( is_admin() ) {
@@ -73,6 +76,7 @@ final class Plugin {
 
 		if ( defined( 'WP_CLI' ) && WP_CLI ) {
 			\WP_CLI::add_command( 'purecart license', LicenseCommands::class );
+			\WP_CLI::add_command( 'purecart saas', SaasCommands::class );
 		}
 
 		do_action( 'purecart_loaded', $this );

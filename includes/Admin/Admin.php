@@ -57,6 +57,7 @@ class Admin {
 	public function __construct() {
 		add_action( 'admin_menu', array( $this, 'register_menus' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		add_action( 'add_meta_boxes', array( $this, 'meta_boxes' ) );
 		add_action( 'save_post_product', array( $this, 'save_product_meta' ) );
 		add_filter( 'plugin_action_links_' . PURECART_BASENAME, array( $this, 'action_links' ) );
 	}
@@ -255,13 +256,19 @@ class Admin {
 	 * @return void
 	 */
 	public function meta_boxes(): void {
+		// 'default' (not 'high') — WooCommerce's own "Product data" box is
+		// also registered at 'high' in this same 'normal' context, and which
+		// of two 'high' boxes renders first depends on add_meta_boxes hook
+		// execution order, not registration order. 'default' always renders
+		// after every 'high' box, so this reliably lands below Product data
+		// instead of racing it.
 		add_meta_box(
 			'purecart_product_settings',
 			__( 'PureCart Settings', 'purecart' ),
 			array( $this, 'render_product_meta_box' ),
 			'product',
 			'normal',
-			'high'
+			'default'
 		);
 	}
 

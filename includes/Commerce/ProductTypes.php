@@ -48,7 +48,16 @@ class ProductTypes {
 	}
 
 	/**
-	 * Map PureCart product types to WC_Product_Simple so WooCommerce handles them correctly.
+	 * Map each PureCart product type to its own WC_Product_Simple subclass.
+	 *
+	 * Not the literal `WC_Product_Simple::class` for all three — see
+	 * PluginProductType's docblock. `WC_Product_Simple::get_type()` is
+	 * hardcoded to always return 'simple', and WooCommerce re-derives and
+	 * rewrites the `product_type` taxonomy term from `$product->get_type()`
+	 * on every save, so mapping to the shared class silently reverted every
+	 * PureCart product to a plain "simple" product on its next save —
+	 * confirmed live: `purecart_saas` orders never reached
+	 * `AccountProvisioner::provision_for_order_item()` because of this.
 	 *
 	 * @since  1.0.0
 	 * @param  string $classname    The default WooCommerce product class name.
@@ -56,14 +65,26 @@ class ProductTypes {
 	 * @return string
 	 */
 	public function product_class( string $classname, string $product_type ): string {
-		if ( in_array( $product_type, array( self::TYPE_PLUGIN, self::TYPE_SAAS, self::TYPE_BUNDLE ), true ) ) {
-			return \WC_Product_Simple::class;
-		}
-		return $classname;
+		return match ( $product_type ) {
+			self::TYPE_PLUGIN => PluginProductType::class,
+			self::TYPE_SAAS   => SaasProductType::class,
+			self::TYPE_BUNDLE => BundleProductType::class,
+			default           => $classname,
+		};
 	}
 
 	/**
-	 * Inline JS on the product edit screen to hide the Shipping tab for PureCart types.
+	 * Inline JS on the product edit screen to hide the Shipping tab and show
+	 * pricing fields for PureCart types.
+	 *
+	 * WooCommerce's own show_if_simple / show_if_variable etc. field
+	 * toggling only recognizes the literal value of the #product-type
+	 * select — it doesn't know product_class() mapped our custom types to
+	 * WC_Product_Simple under the hood, so it leaves every `.show_if_simple`
+	 * field (Regular price, Sale price, tax status/class) hidden for
+	 * purecart_plugin/purecart_saas/purecart_bundle. This forces those
+	 * fields visible again after WooCommerce's own handler runs, the same
+	 * way it already forces the Shipping tab hidden.
 	 *
 	 * @since  1.0.0
 	 * @param  string $hook Current admin page hook suffix.
@@ -89,6 +110,15 @@ class ProductTypes {
                     function purecartToggle(type) {
                         if (purecartTypes.indexOf(type) > -1) {
                             $(".shipping_tab").hide();
+                            $(".show_if_simple").show();
+                            // WooCommerce own change handler runs first (bound
+                            // before this one) and, seeing every .options_group in
+                            // the General panel hidden at that moment, hides the
+                            // General tab list item itself via its hide-empty-
+                            // tabs pass, before the .show() above ever runs.
+                            // Un-hiding the pricing fields alone does not bring
+                            // the tab link back, so force it visible here too.
+                            $(".general_tab").show();
                         } else {
                             $(".shipping_tab").show();
                         }

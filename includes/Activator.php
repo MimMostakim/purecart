@@ -16,6 +16,7 @@ use PureCart\Store\Downloads;
 use PureCart\Store\DownloadLogs;
 use PureCart\Store\ProductVersions;
 use PureCart\Store\SaasAccounts;
+use PureCart\Store\SaasTokens;
 use PureCart\Store\Subscriptions;
 use PureCart\Store\SubscriptionLinkedEntities;
 use PureCart\Store\SubscriptionLogs;
@@ -36,8 +37,8 @@ class Activator {
 	/** DB version option key. */
 	private const DB_VERSION_KEY = 'purecart_db_version';
 
-	/** Current DB schema version. 1.3.0 — Updates module columns on purecart_product_versions. */
-	private const DB_VERSION = '1.3.1';
+	/** Current DB schema version. 1.4.0 — adds wp_purecart_saas_tokens (SaaS login JWT tracking). */
+	private const DB_VERSION = '1.4.0';
 
 	/** Action Scheduler group for all plugin jobs. */
 	private const AS_GROUP = 'purecart';
@@ -95,6 +96,7 @@ class Activator {
 		( new RevenueGoals() )->create();
 
 		( new SaasAccounts() )->create();
+		( new SaasTokens() )->create();
 	}
 
 	/** Schedule recurring Action Scheduler jobs. */
