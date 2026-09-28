@@ -73,7 +73,7 @@ export function IconButton( {
 						fontSize: 10,
 						lineHeight: '17px',
 						backgroundColor: M3.error,
-						color: '#FFFFFF',
+						color: M3.onPrimary,
 						fontFamily: 'Roboto, sans-serif',
 						// The badge sits on top of the icon; clicks belong to the button.
 						pointerEvents: 'none',

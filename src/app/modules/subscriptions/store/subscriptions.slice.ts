@@ -16,7 +16,7 @@
  */
 import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import { doAction } from '@wordpress/hooks';
-import { SUBSCRIPTION_UPDATED_ACTION } from '@/shared/hooks';
+import { SUBSCRIPTION_UPDATED_ACTION } from '@/shared/wp';
 import {
 	fetchSubscriptions,
 	updateSubscription as apiUpdateSubscription,

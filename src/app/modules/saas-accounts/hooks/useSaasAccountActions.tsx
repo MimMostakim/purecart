@@ -18,7 +18,8 @@ import { applyFilters } from '@wordpress/hooks';
 import { __, sprintf } from '@wordpress/i18n';
 import { Eye, ExternalLink, PauseCircle, CheckCircle, KeyRound } from 'lucide-react';
 import { useAppDispatch } from '@/app/store/hooks';
-import { SAAS_ACCOUNT_ACTIONS_FILTER } from '@/shared/hooks';
+import { getAdminConfig } from '@/shared/wp';
+import { SAAS_ACCOUNT_ACTIONS_FILTER } from '@/shared/wp';
 import { ConfirmDialog, Toast } from '@/shared/ui';
 import type { ActionItem, ConfirmDialogProps, ToastProps } from '@/shared/ui';
 import {
@@ -90,7 +91,7 @@ export function useSaasAccountActions( { onViewDetail }: UseSaasAccountActionsOp
 	const closeDialog = () => setDialog( ( d ) => ( { ...d, open: false } ) );
 
 	const openOrder = ( account: SaasAccountRecord ) => {
-		const adminUrl = window.purecartAdmin?.adminUrl;
+		const adminUrl = getAdminConfig().adminUrl;
 		if ( ! adminUrl ) {
 			showToast( __( 'Could not resolve the WooCommerce admin URL.', 'purecart' ), 'error' );
 			return;

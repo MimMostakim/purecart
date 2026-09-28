@@ -155,7 +155,7 @@ export function SaasAccountsPage() {
 		<div className="flex flex-col gap-5">
 			<div className="flex items-center justify-between">
 				<div>
-					<h1 style={ { margin: 0, fontSize: '24px', fontWeight: 700, color: M3.onSurface } }>
+					<h1 style={ { margin: 0, fontSize: '24px', fontWeight: 500, color: M3.onSurface } }>
 						{ __( 'SaaS Accounts', 'purecart' ) }
 					</h1>
 					<p style={ { margin: '4px 0 0', fontSize: '13px', color: M3.onSurfaceVariant } }>

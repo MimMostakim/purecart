@@ -15,7 +15,7 @@
  */
 import { useState } from 'react';
 import { applyFilters } from '@wordpress/hooks';
-import { SUBSCRIPTION_ACTIONS_FILTER } from '@/shared/hooks';
+import { SUBSCRIPTION_ACTIONS_FILTER } from '@/shared/wp';
 import {
 	Users,
 	FileText,

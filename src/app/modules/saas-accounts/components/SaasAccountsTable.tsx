@@ -15,13 +15,12 @@
  * @since 1.0.0
  */
 import React from 'react';
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 import { M3 } from '@/theme';
-import { StatusBadge } from '@/shared/ui/StatusBadge';
-import { ActionDropdown } from '@/shared/ui/ActionDropdown';
 import type { ActionItem } from '@/shared/ui';
-import { saasPlanLabel, formatProvisionedAt } from '../constants';
 import type { SaasAccountRecord } from '../types';
+import { SaasAccountsTableRow } from './SaasAccountsTableRow';
+import { SaasAccountsPagination } from './SaasAccountsPagination';
 
 interface SaasAccountsTableProps {
 	items: SaasAccountRecord[];
@@ -59,7 +58,7 @@ export function SaasAccountsTable( {
 	if ( 0 === items.length ) {
 		return (
 			<Placeholder>
-				<p style={ { fontSize: '15px', fontWeight: 600, color: M3.onSurface, margin: '0 0 8px' } }>
+				<p style={ { fontSize: '14px', fontWeight: 500, color: M3.onSurface, margin: '0 0 8px' } }>
 					{ __( 'No SaaS accounts yet', 'purecart' ) }
 				</p>
 				<p style={ { fontSize: '13px', margin: 0 } }>
@@ -91,7 +90,7 @@ export function SaasAccountsTable( {
 								backgroundColor: M3.surfaceContainerLow,
 								borderBottom: `1px solid ${ M3.outlineVariant }`,
 								fontSize: '12px',
-								fontWeight: 600,
+								fontWeight: 500,
 								color: M3.onSurfaceVariant,
 								textTransform: 'uppercase',
 								letterSpacing: '0.04em',
@@ -110,128 +109,25 @@ export function SaasAccountsTable( {
 					</thead>
 					<tbody>
 						{ items.map( ( account, i ) => (
-							<tr
+							<SaasAccountsTableRow
 								key={ account.id }
-								onClick={ () => onViewDetail( account ) }
-								style={ {
-									borderBottom: `1px solid ${ M3.outlineVariant }`,
-									borderLeft:
-										'suspended' === account.status
-											? `3px solid ${ M3.warning }`
-											: '3px solid transparent',
-									backgroundColor: 0 === i % 2 ? M3.surface : M3.surfaceContainerLow,
-									cursor: 'pointer',
-								} }
-							>
-								<td style={ { padding: '12px 16px' } }>
-									<div style={ { fontSize: '13px', fontWeight: 500, color: M3.onSurface } }>
-										{ account.customerName ||
-											/* translators: %s: order number, shown when an account has no resolved customer name */
-											sprintf( __( 'Order #%s', 'purecart' ), account.orderNumber ) }
-									</div>
-									<div style={ { fontSize: '12px', color: M3.onSurfaceVariant } }>
-										{ account.customerEmail }
-									</div>
-								</td>
-								<td style={ { padding: '12px 16px' } }>
-									<div style={ { fontSize: '13px', color: M3.onSurface } }>{ account.productName }</div>
-									<div style={ { fontSize: '12px', color: M3.onSurfaceVariant } }>
-										{
-											/* translators: %s: WooCommerce order number */
-											sprintf( __( 'Order #%s', 'purecart' ), account.orderNumber )
-										}
-									</div>
-								</td>
-								<td style={ { padding: '12px 16px' } }>
-									<span
-										className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-										style={ {
-											backgroundColor: M3.secondaryContainer,
-											color: M3.onSecondaryContainer,
-											fontFamily: 'Roboto, sans-serif',
-										} }
-									>
-										{ saasPlanLabel( account.plan ) }
-									</span>
-								</td>
-								<td
-									style={ {
-										padding: '12px 16px',
-										fontSize: '12px',
-										fontFamily: 'Roboto Mono, monospace',
-										color: M3.onSurfaceVariant,
-										whiteSpace: 'nowrap',
-									} }
-								>
-									{ account.apiKeyMasked }
-								</td>
-								<td style={ { padding: '12px 16px' } }>
-									<StatusBadge status={ account.status } />
-								</td>
-								<td
-									style={ {
-										padding: '12px 16px',
-										fontSize: '12px',
-										color: M3.onSurfaceVariant,
-										whiteSpace: 'nowrap',
-									} }
-								>
-									{ formatProvisionedAt( account.provisionedAt ) }
-								</td>
-								<td style={ { padding: '12px 16px', textAlign: 'right' } }>
-									<ActionDropdown actions={ rowActions( account ) } />
-								</td>
-							</tr>
+								account={ account }
+								zebra={ 0 === i % 2 }
+								onViewDetail={ onViewDetail }
+								rowActions={ rowActions }
+							/>
 						) ) }
 					</tbody>
 				</table>
 			</div>
 
-			<div
-				style={ {
-					display: 'flex',
-					alignItems: 'center',
-					justifyContent: 'space-between',
-					padding: '12px 16px',
-					borderTop: `1px solid ${ M3.outlineVariant }`,
-					fontSize: '12px',
-					color: M3.onSurfaceVariant,
-				} }
-			>
-				<span>
-					{
-						/* translators: 1: accounts shown on this page, 2: total matching accounts */
-						sprintf( __( 'Showing %1$d of %2$d accounts', 'purecart' ), items.length, totalCount )
-					}
-				</span>
-				<div style={ { display: 'flex', gap: '4px' } }>
-					<button
-						disabled={ currentPage <= 1 }
-						onClick={ () => onPageChange( currentPage - 1 ) }
-						style={ paginationButtonStyle( false, currentPage <= 1 ) }
-					>
-						{ __( 'Previous', 'purecart' ) }
-					</button>
-					{ Array.from( { length: totalPages }, ( _, i ) => i + 1 )
-						.slice( Math.max( 0, currentPage - 3 ), Math.max( 0, currentPage - 3 ) + 5 )
-						.map( ( p ) => (
-							<button
-								key={ p }
-								onClick={ () => onPageChange( p ) }
-								style={ paginationButtonStyle( p === currentPage, false ) }
-							>
-								{ p }
-							</button>
-						) ) }
-					<button
-						disabled={ currentPage >= totalPages }
-						onClick={ () => onPageChange( currentPage + 1 ) }
-						style={ paginationButtonStyle( false, currentPage >= totalPages ) }
-					>
-						{ __( 'Next', 'purecart' ) }
-					</button>
-				</div>
-			</div>
+			<SaasAccountsPagination
+				currentPage={ currentPage }
+				totalPages={ totalPages }
+				totalCount={ totalCount }
+				itemCount={ items.length }
+				onPageChange={ onPageChange }
+			/>
 		</div>
 	);
 }
@@ -252,17 +148,4 @@ function Placeholder( { children }: { children: React.ReactNode } ) {
 			{ children }
 		</div>
 	);
-}
-
-function paginationButtonStyle( active: boolean, disabled: boolean ): React.CSSProperties {
-	return {
-		padding: '4px 10px',
-		borderRadius: '6px',
-		fontSize: '12px',
-		cursor: disabled ? 'default' : 'pointer',
-		opacity: disabled ? 0.4 : 1,
-		backgroundColor: active ? M3.primary : 'transparent',
-		color: active ? M3.onPrimary : M3.onSurfaceVariant,
-		border: active ? 'none' : `1px solid ${ M3.outline }`,
-	};
 }

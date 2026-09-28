@@ -105,7 +105,7 @@ export function HelpMenu( { page }: { page: Page } ) {
 								borderTop: `1px solid ${ M3.outlineVariant }`,
 								color: M3.onSurfaceVariant,
 								fontFamily: 'Roboto, sans-serif',
-								fontSize: 11,
+								fontSize: '11px',
 							} }
 						>
 							{ sprintf(

@@ -20,6 +20,7 @@ import { M3 } from '@/theme';
 import { StatusBadge } from '@/shared/ui/StatusBadge';
 import { OutlinedButton } from '@/shared/ui/OutlinedButton';
 import type { ActionItem } from '@/shared/ui';
+import { getAdminConfig } from '@/shared/wp';
 import { saasPlanLabel, formatProvisionedAt } from '../constants';
 import type { SaasAccountRecord } from '../types';
 
@@ -55,7 +56,7 @@ export function SaasAccountDetailPanel( { account, onClose, actions }: SaasAccou
 		return null;
 	}
 
-	const adminUrl = window.purecartAdmin?.adminUrl;
+	const adminUrl = getAdminConfig().adminUrl;
 	const orderUrl = adminUrl ? `${ adminUrl }post.php?post=${ account.orderId }&action=edit` : null;
 
 	return (
@@ -96,7 +97,7 @@ export function SaasAccountDetailPanel( { account, onClose, actions }: SaasAccou
 					} }
 				>
 					<div>
-						<h2 style={ { margin: 0, fontSize: '17px', fontWeight: 700, color: M3.onSurface } }>
+						<h2 style={ { margin: 0, fontSize: '16px', fontWeight: 500, color: M3.onSurface } }>
 							{ account.customerName ||
 								/* translators: %s: WooCommerce order number */
 								sprintf( __( 'Order #%s', 'purecart' ), account.orderNumber ) }

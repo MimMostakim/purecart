@@ -7,6 +7,7 @@
  * @file
  * @since 1.0.0
  */
+import { M3 } from '@/theme';
 import { Card } from '@/shared/ui/Card';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
@@ -66,7 +67,7 @@ export function SaasAccountsPageSkeleton() {
 					<div
 						key={ row }
 						className="flex items-center gap-4 px-4"
-						style={ { height: 56, borderTop: '1px solid rgba(0,0,0,0.06)' } }
+						style={ { height: 56, borderTop: `1px solid ${ M3.outlineVariant }` } }
 					>
 						{ Array.from( { length: COLUMN_COUNT } ).map( ( _, col ) => (
 							<Cell key={ col } grow={ COLUMN_COUNT - 1 === col ? 0.4 : 1 } />
