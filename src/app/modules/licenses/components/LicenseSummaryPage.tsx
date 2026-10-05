@@ -14,11 +14,11 @@ import {
 	AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
 	XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { ArrowLeft } from 'lucide-react';
-import { __ } from '@wordpress/i18n';
+import { ArrowLeft, Key, CheckCircle, Calendar, XCircle } from 'lucide-react';
+import { __, sprintf } from '@wordpress/i18n';
 import { M3 } from '@/theme';
 import { OutlinedButton } from '@/shared/ui/OutlinedButton';
-import { StatCard } from '@/shared/ui/StatCard';
+import { KpiCard } from '@/shared/ui/KpiCard';
 import { planLabel } from '../constants';
 import { fetchLicenseReportSummary } from '../api';
 import { PAGE_PATHS } from '@/app/router';
@@ -63,6 +63,10 @@ export function LicenseSummaryPage() {
 		fetchLicenseReportSummary().then( setSummary );
 	}, [] );
 
+	const activePct = summary.stats.total > 0
+		? Math.round( ( summary.stats.active / summary.stats.total ) * 100 )
+		: 0;
+
 	const trendData = summary.issuedByDay.map( ( d ) => ( {
 		date: new Date( d.date ).toLocaleDateString( 'en-US', { month: 'short', day: 'numeric' } ),
 		count: d.count,
@@ -86,10 +90,39 @@ export function LicenseSummaryPage() {
 			</div>
 
 			<div className="grid grid-cols-4 gap-4">
-				<StatCard label={ __( 'Total Licenses', 'purecart' ) } value={ String( summary.stats.total ) } color={ M3.primary } />
-				<StatCard label={ __( 'Active', 'purecart' ) } value={ String( summary.stats.active ) } color={ M3.success } />
-				<StatCard label={ __( 'Expiring (30d)', 'purecart' ) } value={ String( summary.stats.expiring_30d ) } color={ M3.warning } />
-				<StatCard label={ __( 'Revoked', 'purecart' ) } value={ String( summary.stats.revoked ) } color={ M3.error } />
+				<KpiCard
+					label={ __( 'Total Licenses', 'purecart' ) }
+					value={ String( summary.stats.total ) }
+					trend={ __( 'All time', 'purecart' ) }
+					trendUp
+					icon={ Key }
+				/>
+				<KpiCard
+					label={ __( 'Active', 'purecart' ) }
+					value={ String( summary.stats.active ) }
+					/* translators: %d: percentage of licenses that are active */
+					trend={ sprintf( __( '%d%% of total', 'purecart' ), activePct ) }
+					trendUp={ summary.stats.active > 0 }
+					icon={ CheckCircle }
+				/>
+				<KpiCard
+					label={ __( 'Expiring (30d)', 'purecart' ) }
+					value={ String( summary.stats.expiring_30d ) }
+					trend={
+						summary.stats.expiring_30d > 0
+							? __( 'Needs attention', 'purecart' )
+							: __( 'All clear', 'purecart' )
+					}
+					trendUp={ summary.stats.expiring_30d === 0 }
+					icon={ Calendar }
+				/>
+				<KpiCard
+					label={ __( 'Revoked', 'purecart' ) }
+					value={ String( summary.stats.revoked ) }
+					trend={ __( 'All time', 'purecart' ) }
+					trendUp={ false }
+					icon={ XCircle }
+				/>
 			</div>
 
 			<div className="grid grid-cols-2 gap-5">

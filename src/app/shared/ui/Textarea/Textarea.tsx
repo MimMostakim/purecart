@@ -48,9 +48,10 @@ export function Textarea( {
 			placeholder={ placeholder }
 			disabled={ disabled }
 			onChange={ ( e ) => onChange( e.target.value ) }
-			className={ `w-full text-sm rounded-lg outline-none resize-y ${ className }` }
+			className={ `w-full text-sm outline-none resize-y ${ className }` }
 			style={ {
 				padding: '8px 12px',
+				borderRadius: '0.5rem',
 				fontFamily: 'Roboto Mono, monospace',
 				color: M3.onSurface,
 				backgroundColor: disabled
