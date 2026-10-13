@@ -57,10 +57,11 @@ export function Input( {
 			onChange={
 				onChange ? ( e ) => onChange( e.target.value ) : undefined
 			}
-			className={ `text-sm rounded-lg outline-none ${ className }` }
+			className={ `text-sm outline-none ${ className }` }
 			style={ {
 				width,
 				padding: '8px 12px',
+				borderRadius: '0.5rem',
 				fontFamily:
 					type === 'number'
 						? 'Roboto Mono, monospace'

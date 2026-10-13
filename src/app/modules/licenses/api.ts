@@ -132,9 +132,12 @@ export async function duplicateLicense(id: number): Promise<{ success: boolean; 
  * GET /purecart/v1/reports/licenses/summary — LicenseSummaryPage's data.
  *
  * @since 1.0.0
+ * @param {Object} [params]        Optional query parameters.
+ * @param {string} [params.range]  Date range filter: '3m' | '6m' | '12m' | 'All time'.
  */
-export async function fetchLicenseReportSummary(): Promise<LicenseReportSummary> {
-	return purecartFetch<LicenseReportSummary>('/reports/licenses/summary');
+export async function fetchLicenseReportSummary( params: { range?: string } = {} ): Promise<LicenseReportSummary> {
+	const qs = params.range ? `?range=${ encodeURIComponent( params.range ) }` : '';
+	return purecartFetch<LicenseReportSummary>( `/reports/licenses/summary${ qs }` );
 }
 
 export interface LicenseSettings {

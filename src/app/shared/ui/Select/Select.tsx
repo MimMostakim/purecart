@@ -45,10 +45,11 @@ export function Select( {
 			value={ value }
 			disabled={ disabled }
 			onChange={ ( e ) => onChange( e.target.value ) }
-			className={ `text-sm rounded-lg outline-none flex-shrink-0 ${ className }` }
+			className={ `text-sm outline-none flex-shrink-0 ${ className }` }
 			style={ {
 				width,
 				padding: '8px 12px',
+				borderRadius: '0.5rem',
 				fontFamily: 'Roboto, sans-serif',
 				color: M3.onSurface,
 				backgroundColor: disabled

@@ -154,6 +154,74 @@ function purecart_seed_licensing(): array {
 		),
 	);
 
+	// ── KPI / summary page volume rows ────────────────────────────────────────
+	// Spread across multiple users and products so the three summary page
+	// sections — Licenses by Product, Top Customers, Recent Activity — all
+	// render with meaningful data.  All keys match TEST1-% for teardown.
+	//
+	// Columns: key, user_id, product_id, plan, status, expires_at, updated_at_offset
+	// updated_at_offset: strtotime() string applied to created_at so that rows
+	// whose status changed after issue carry a later updated_at, which the
+	// recentActivity query uses to infer 'revoked' / 'suspended' type.
+	$bulk = array(
+		// ── Plugin Pro (PURECART_SEED_PRODUCT_PLUGIN) ──────────────────────
+		// Alice — 5 licenses (top customer)
+		array( 'TEST1-BULK-KPI-001', PURECART_SEED_USER_ALICE, PURECART_SEED_PRODUCT_PLUGIN, 'single',    'active',    gmdate( 'Y-m-d H:i:s', strtotime( '+8 days' ) ),    null ),
+		array( 'TEST1-BULK-KPI-002', PURECART_SEED_USER_ALICE, PURECART_SEED_PRODUCT_PLUGIN, 'single',    'active',    gmdate( 'Y-m-d H:i:s', strtotime( '+15 days' ) ),   null ),
+		array( 'TEST1-BULK-KPI-003', PURECART_SEED_USER_ALICE, PURECART_SEED_PRODUCT_PLUGIN, 'multi',     'active',    gmdate( 'Y-m-d H:i:s', strtotime( '+6 months' ) ),  null ),
+		array( 'TEST1-BULK-KPI-004', PURECART_SEED_USER_ALICE, PURECART_SEED_PRODUCT_PLUGIN, 'unlimited', 'active',    gmdate( 'Y-m-d H:i:s', strtotime( '+1 year' ) ),    null ),
+		array( 'TEST1-BULK-KPI-005', PURECART_SEED_USER_ALICE, PURECART_SEED_PRODUCT_PLUGIN, 'lifetime',  'active',    null,                                                 null ),
+		// Bob — 3 licenses
+		array( 'TEST1-BULK-KPI-006', PURECART_SEED_USER_BOB,   PURECART_SEED_PRODUCT_PLUGIN, 'multi',     'active',    gmdate( 'Y-m-d H:i:s', strtotime( '+22 days' ) ),   null ),
+		array( 'TEST1-BULK-KPI-007', PURECART_SEED_USER_BOB,   PURECART_SEED_PRODUCT_PLUGIN, 'single',    'active',    gmdate( 'Y-m-d H:i:s', strtotime( '+10 months' ) ), null ),
+		array( 'TEST1-BULK-KPI-008', PURECART_SEED_USER_BOB,   PURECART_SEED_PRODUCT_PLUGIN, 'single',    'expired',   gmdate( 'Y-m-d H:i:s', strtotime( '-2 months' ) ),  null ),
+		// Carol — 2 licenses (one revoked, one suspended)
+		array( 'TEST1-BULK-KPI-009', PURECART_SEED_USER_CAROL, PURECART_SEED_PRODUCT_PLUGIN, 'single',    'revoked',   null,                                                 '+1 hour' ),
+		array( 'TEST1-BULK-KPI-010', PURECART_SEED_USER_CAROL, PURECART_SEED_PRODUCT_PLUGIN, 'multi',     'suspended', gmdate( 'Y-m-d H:i:s', strtotime( '+4 months' ) ),  '+2 hours' ),
+		// Dave — 2 licenses
+		array( 'TEST1-BULK-KPI-011', PURECART_SEED_USER_DAVE,  PURECART_SEED_PRODUCT_PLUGIN, 'single',    'active',    gmdate( 'Y-m-d H:i:s', strtotime( '+3 months' ) ),  null ),
+		array( 'TEST1-BULK-KPI-012', PURECART_SEED_USER_DAVE,  PURECART_SEED_PRODUCT_PLUGIN, 'single',    'expired',   gmdate( 'Y-m-d H:i:s', strtotime( '-5 months' ) ),  null ),
+		// Erin — 1 license
+		array( 'TEST1-BULK-KPI-013', PURECART_SEED_USER_ERIN,  PURECART_SEED_PRODUCT_PLUGIN, 'lifetime',  'active',    null,                                                 null ),
+
+		// ── Theme Bundle (PURECART_SEED_PRODUCT_THEME) ─────────────────────
+		// Alice — 3 licenses on the theme (makes her rank #1 overall)
+		array( 'TEST1-BULK-KPI-014', PURECART_SEED_USER_ALICE, PURECART_SEED_PRODUCT_THEME,  'single',    'active',    gmdate( 'Y-m-d H:i:s', strtotime( '+8 months' ) ),  null ),
+		array( 'TEST1-BULK-KPI-015', PURECART_SEED_USER_ALICE, PURECART_SEED_PRODUCT_THEME,  'multi',     'active',    gmdate( 'Y-m-d H:i:s', strtotime( '+18 months' ) ), null ),
+		array( 'TEST1-BULK-KPI-016', PURECART_SEED_USER_ALICE, PURECART_SEED_PRODUCT_THEME,  'single',    'expired',   gmdate( 'Y-m-d H:i:s', strtotime( '-1 month' ) ),   null ),
+		// Bob — 2 licenses on the theme
+		array( 'TEST1-BULK-KPI-017', PURECART_SEED_USER_BOB,   PURECART_SEED_PRODUCT_THEME,  'single',    'active',    gmdate( 'Y-m-d H:i:s', strtotime( '+5 months' ) ),  null ),
+		array( 'TEST1-BULK-KPI-018', PURECART_SEED_USER_BOB,   PURECART_SEED_PRODUCT_THEME,  'multi',     'revoked',   null,                                                 '+30 minutes' ),
+		// Carol — 1 license on the theme
+		array( 'TEST1-BULK-KPI-019', PURECART_SEED_USER_CAROL, PURECART_SEED_PRODUCT_THEME,  'single',    'suspended', gmdate( 'Y-m-d H:i:s', strtotime( '+2 months' ) ),  '+45 minutes' ),
+	);
+
+	foreach ( $bulk as [ $key, $user_id, $product_id, $plan, $status, $expires_at, $updated_offset ] ) {
+		$created_at = current_time( 'mysql' );
+		$updated_at = $updated_offset
+			? gmdate( 'Y-m-d H:i:s', strtotime( $updated_offset, strtotime( $created_at ) ) )
+			: $created_at;
+
+		$wpdb->delete( $licenses_table, array( 'license_key' => $key ), array( '%s' ) );
+		$wpdb->insert(
+			$licenses_table,
+			array(
+				'order_id'         => 99000,
+				'user_id'          => $user_id,
+				'product_id'       => $product_id,
+				'license_key'      => $key,
+				'plan_type'        => $plan,
+				'status'           => $status,
+				'activation_limit' => 1,
+				'activated_count'  => 0,
+				'expires_at'       => $expires_at,
+				'created_at'       => $created_at,
+				'updated_at'       => $updated_at,
+			),
+			array( '%d', '%d', '%d', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%s' )
+		);
+	}
+
 	$ids = array();
 
 	foreach ( $licenses as $license ) {

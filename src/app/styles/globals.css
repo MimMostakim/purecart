@@ -1,0 +1,137 @@
+/*
+ * WordPress admin global styles (wp-admin.css, forms.css) apply directly to
+ * bare element selectors such as `input[type="text"]`, `select`, `button`
+ * with specificity (0,0,1)–(0,1,1).  Inline `style={}` props handle static
+ * property overrides, but pseudo-state rules (:focus, :hover, :active) and
+ * forced `height` values cannot be countered with inline styles.
+ *
+ * Every rule here is scoped under `#purecart-root` (specificity 1,0,0+) so
+ * it beats any WP admin selector without needing !important.
+ */
+
+/* ── Text inputs & textarea ─────────────────────────────────────────────── */
+
+#purecart-root input[type="text"],
+#purecart-root input[type="email"],
+#purecart-root input[type="password"],
+#purecart-root input[type="number"],
+#purecart-root input[type="search"],
+#purecart-root input[type="url"],
+#purecart-root input[type="tel"],
+#purecart-root input[type="date"],
+#purecart-root input[type="time"],
+#purecart-root input[type="datetime-local"],
+#purecart-root input[type="month"],
+#purecart-root input[type="week"],
+#purecart-root input[type="color"],
+#purecart-root textarea {
+  box-sizing: border-box;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  margin: 0;
+  line-height: normal;
+  /* WP sets a fixed line-height that forces taller inputs */
+}
+
+#purecart-root input[type="text"]:focus,
+#purecart-root input[type="email"]:focus,
+#purecart-root input[type="password"]:focus,
+#purecart-root input[type="number"]:focus,
+#purecart-root input[type="search"]:focus,
+#purecart-root input[type="url"]:focus,
+#purecart-root input[type="tel"]:focus,
+#purecart-root input[type="date"]:focus,
+#purecart-root input[type="time"]:focus,
+#purecart-root input[type="datetime-local"]:focus,
+#purecart-root input[type="month"]:focus,
+#purecart-root input[type="week"]:focus,
+#purecart-root textarea:focus {
+  /* WP admin adds a 1px blue box-shadow, changes border-color, and can force
+     background-color: #fff on focus — none of those should apply here. */
+  box-shadow: none !important;
+  border-color: unset;
+  background-color: unset !important;
+  outline: none;
+}
+
+/* ── Select ─────────────────────────────────────────────────────────────── */
+
+#purecart-root select {
+  box-sizing: border-box;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  margin: 0;
+  line-height: normal;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+#purecart-root select:focus {
+  box-shadow: none !important;
+  border-color: unset;
+  background-color: unset !important;
+  outline: none;
+}
+
+/* ── Buttons (Toggle, FilledButton, OutlinedButton, etc.) ───────────────── */
+
+#purecart-root button {
+  box-sizing: border-box;
+}
+
+/*
+ * WP admin (and some WooCommerce styles) change background, border-color,
+ * and add a box-shadow on :hover / :focus for button elements.  The Toggle
+ * component sets all visual properties inline, but :hover/:focus overrides
+ * from WP can still bleed through.
+ */
+#purecart-root button:hover,
+#purecart-root button:focus,
+#purecart-root button:active {
+  background: inherit;
+  background-color: inherit;
+  border-color: inherit;
+  box-shadow: none;
+  color: inherit;
+  outline: none;
+}
+
+/* ── Checkbox & radio ───────────────────────────────────────────────────── */
+
+/*
+ * WP admin aggressively restyles checkboxes and radios with custom
+ * appearances.  Any component that renders its own checkbox/radio UI
+ * (e.g., a custom toggle built on <input type="checkbox">) needs these
+ * resets so WP doesn't paint over it.
+ */
+#purecart-root input[type="checkbox"],
+#purecart-root input[type="radio"] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  box-shadow: none;
+  margin: 0;
+  padding: 0;
+}
+
+#purecart-root input[type="checkbox"]:focus,
+#purecart-root input[type="radio"]:focus {
+  box-shadow: none;
+  outline: none;
+}
+
+/* ── Number input spinners ──────────────────────────────────────────────── */
+
+/*
+ * WP admin hides or resizes the browser's native spin buttons on number
+ * inputs.  Reset them here so components that want them get them, and
+ * components that explicitly hide them can still do so with their own CSS.
+ */
+#purecart-root input[type="number"]::-webkit-inner-spin-button,
+#purecart-root input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: auto;
+  opacity: 1;
+}
