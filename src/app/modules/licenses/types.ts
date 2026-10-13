@@ -90,10 +90,47 @@ export interface LicenseTopProduct {
 	count: number;
 }
 
+export type LicenseActivityType = 'issued' | 'renewed' | 'expired' | 'revoked' | 'suspended';
+
+export interface LicenseActivityByMonth {
+	month: string;
+	issued: number;
+	renewed: number;
+	revoked: number;
+}
+
+export interface LicenseByProduct {
+	productId: number;
+	productName: string;
+	active: number;
+	expired: number;
+	suspended: number;
+	revoked: number;
+}
+
+export interface LicenseRecentActivity {
+	type: LicenseActivityType;
+	customerName: string;
+	productName: string;
+	planType: LicensePlanType;
+	createdAt: string; // ISO datetime
+}
+
+export interface LicenseTopCustomer {
+	userId: number;
+	customerName: string;
+	totalLicenses: number;
+	activeLicenses: number;
+}
+
 export interface LicenseReportSummary {
 	stats: LicenseStats;
 	issuedByDay: LicenseIssuedByDay[];
 	byPlan: LicenseByPlan[];
 	byStatus: LicenseByStatus[];
 	topProducts: LicenseTopProduct[];
+	activityByMonth?: LicenseActivityByMonth[];
+	byProduct?: LicenseByProduct[];
+	recentActivity?: LicenseRecentActivity[];
+	topCustomers?: LicenseTopCustomer[];
 }

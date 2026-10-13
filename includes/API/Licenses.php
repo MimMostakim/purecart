@@ -728,37 +728,122 @@ class Licenses extends PureCartApi {
               LIMIT 10"
 		) ?: array();
 
+		// Per-product status breakdown — powers the Licenses by Product table.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- As above.
+		$by_product_status = $wpdb->get_results(
+			"SELECT
+                l.product_id,
+                p.post_title AS product_name,
+                SUM( l.status = 'active'    ) AS active,
+                SUM( l.status = 'expired'   ) AS expired,
+                SUM( l.status = 'suspended' ) AS suspended,
+                SUM( l.status = 'revoked'   ) AS revoked
+               FROM {$table} l
+               LEFT JOIN {$wpdb->posts} p ON p.ID = l.product_id
+           GROUP BY l.product_id
+           ORDER BY ( SUM( l.status = 'active' ) + SUM( l.status = 'expired' ) + SUM( l.status = 'suspended' ) + SUM( l.status = 'revoked' ) ) DESC
+              LIMIT 10"
+		) ?: array();
+
+		// Top customers ranked by total license count — powers the Top Customers card.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- As above.
+		$top_customers = $wpdb->get_results(
+			"SELECT
+                l.user_id,
+                u.display_name AS customer_name,
+                COUNT(*)                         AS total_licenses,
+                SUM( l.status = 'active' )       AS active_licenses
+               FROM {$table} l
+               LEFT JOIN {$wpdb->users} u ON u.ID = l.user_id
+           GROUP BY l.user_id
+           ORDER BY total_licenses DESC
+              LIMIT 10"
+		) ?: array();
+
+		// Recent license activity — most recently created or status-changed rows.
+		// type is inferred: rows whose updated_at equals created_at are 'issued';
+		// rows whose status changed after creation carry their current status as type.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- As above.
+		$recent_activity = $wpdb->get_results(
+			"SELECT
+                l.user_id,
+                u.display_name                                                              AS customer_name,
+                l.product_id,
+                p.post_title                                                                AS product_name,
+                l.plan_type,
+                CASE
+                    WHEN l.updated_at <= l.created_at OR l.status = 'active' THEN 'issued'
+                    ELSE l.status
+                END                                                                         AS type,
+                GREATEST( l.created_at, l.updated_at )                                     AS event_time
+               FROM {$table} l
+               LEFT JOIN {$wpdb->users} u ON u.ID = l.user_id
+               LEFT JOIN {$wpdb->posts} p ON p.ID = l.product_id
+           ORDER BY event_time DESC
+              LIMIT 10"
+		) ?: array();
+
 		return rest_ensure_response(
 			array(
-				'stats'       => $stats,
-				'issuedByDay' => array_map(
+				'stats'          => $stats,
+				'issuedByDay'    => array_map(
 					static fn( $r ) => array(
 						'date'  => (string) $r->day,
 						'count' => (int) $r->total,
 					),
 					$issued_by_day
 				),
-				'byPlan'      => array_map(
+				'byPlan'         => array_map(
 					static fn( $r ) => array(
 						'plan'  => (string) $r->plan_type,
 						'count' => (int) $r->total,
 					),
 					$by_plan
 				),
-				'byStatus'    => array_map(
+				'byStatus'       => array_map(
 					static fn( $r ) => array(
 						'status' => (string) $r->status,
 						'count'  => (int) $r->total,
 					),
 					$by_status
 				),
-				'topProducts' => array_map(
+				'topProducts'    => array_map(
 					static fn( $r ) => array(
 						'productId'   => (int) $r->product_id,
 						'productName' => (string) ( $r->product_name ?: "Product #{$r->product_id}" ),
 						'count'       => (int) $r->total,
 					),
 					$by_product
+				),
+				'byProduct'      => array_map(
+					static fn( $r ) => array(
+						'productId'   => (int) $r->product_id,
+						'productName' => (string) ( $r->product_name ?: "Product #{$r->product_id}" ),
+						'active'      => (int) $r->active,
+						'expired'     => (int) $r->expired,
+						'suspended'   => (int) $r->suspended,
+						'revoked'     => (int) $r->revoked,
+					),
+					$by_product_status
+				),
+				'topCustomers'   => array_map(
+					static fn( $r ) => array(
+						'userId'          => (int) $r->user_id,
+						'customerName'    => (string) ( $r->customer_name ?: "User #{$r->user_id}" ),
+						'totalLicenses'   => (int) $r->total_licenses,
+						'activeLicenses'  => (int) $r->active_licenses,
+					),
+					$top_customers
+				),
+				'recentActivity' => array_map(
+					static fn( $r ) => array(
+						'type'         => (string) $r->type,
+						'customerName' => (string) ( $r->customer_name ?: "User #{$r->user_id}" ),
+						'productName'  => (string) ( $r->product_name ?: "Product #{$r->product_id}" ),
+						'planType'     => (string) $r->plan_type,
+						'createdAt'    => (string) $r->event_time,
+					),
+					$recent_activity
 				),
 			)
 		);
