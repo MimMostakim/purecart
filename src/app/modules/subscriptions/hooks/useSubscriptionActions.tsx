@@ -14,8 +14,11 @@
  * @since 1.0.0
  */
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { applyFilters } from '@wordpress/hooks';
+import { __, sprintf } from '@wordpress/i18n';
 import { SUBSCRIPTION_ACTIONS_FILTER } from '@/shared/wp';
+import { getAdminConfig } from '@/shared/wp';
 import {
 	Users,
 	FileText,
@@ -45,9 +48,16 @@ import { fetchPaymentHistory } from '../api';
 import { addBillingInterval } from '../utils';
 import type { SubscriptionRecord, PaymentRecord, RetentionOffer } from '../types';
 import { useAppDispatch } from '@/app/store/hooks';
+import { licenseDetailPath } from '@/app/router';
+import {
+	revokeLicenseThunk,
+	resetLicenseActivationsThunk,
+} from '@/modules/licenses';
+import {
+	suspendSaasAccountThunk,
+} from '@/modules/saas-accounts';
 import {
 	patchSubscription,
-	removeSubscription,
 	earlyRenewSubscriptionThunk,
 	retryPaymentThunk,
 	pauseSubscriptionThunk,
@@ -96,6 +106,7 @@ const EMPTY_DIALOG: DialogState = {
  */
 export function useSubscriptionActions() {
 	const dispatch = useAppDispatch();
+	const navigate = useNavigate();
 
 	const [toast, setToast] = useState<ToastProps>({ message: '', type: 'success', visible: false });
 	const [dialog, setDialog] = useState<DialogState>(EMPTY_DIALOG);
@@ -189,9 +200,17 @@ export function useSubscriptionActions() {
 	// ── Row actions ─────────────────────────────────────────────────────────────
 	const rowActions = (row: SubscriptionRecord): ActionItem[] => {
 		const universal: ActionItem[] = [
-			{ label: 'View Customer', icon: Users, onClick: () => showToast(`Customer profile for ${row.customer} — coming once a Customer module exists`, 'info') },
+			{ label: __( 'View Customer', 'purecart' ), icon: Users, onClick: () => {
+			const adminUrl = getAdminConfig().adminUrl;
+			const wpUserId = row.customerId?.replace( /\D/g, '' );
+			if ( adminUrl && wpUserId ) {
+				window.open( `${ adminUrl }user-edit.php?user_id=${ wpUserId }`, '_blank' );
+			} else {
+				showToast( __( 'No linked WordPress user for this subscription', 'purecart' ), 'info' );
+			}
+		} },
 			{ label: 'View Payment History', icon: FileText, onClick: () => openPaymentHistory(row) },
-			{ label: 'Send Payment Receipt', icon: Mail, onClick: () => showToast(`Receipt emailed to ${row.customer}`, 'success') },
+			{ label: __( 'Send Payment Receipt', 'purecart' ), icon: Mail, onClick: () => showToast( __( 'Receipt emails are not available yet — no email endpoint exists for this action', 'purecart' ), 'info' ) },
 
 			...(row.status === 'past_due'
 				? [{
@@ -213,8 +232,8 @@ export function useSubscriptionActions() {
 				} as ActionItem]
 				: []),
 			{
-				label: 'Update Payment Method', icon: CreditCard, dividerBefore: row.status !== 'past_due',
-				onClick: () => showToast(`Payment method update link sent to ${row.customer}`, 'success'),
+				label: __( 'Update Payment Method', 'purecart' ), icon: CreditCard, dividerBefore: row.status !== 'past_due',
+				onClick: () => sendCardUpdateEmail( row ),
 			},
 			{
 				label: 'Early Renewal', icon: FastForward,
@@ -243,11 +262,11 @@ export function useSubscriptionActions() {
 				})),
 			},
 			{
-				label: 'Request Reauthorization', icon: Lock,
+				label: __( 'Request Reauthorization', 'purecart' ), icon: Lock,
 				disabled: row.status !== 'past_due' && row.status !== 'pending_reauth',
 				onClick: () => openDialog(buildScaReauthDialog(row, () => {
 					updateRow(row.id, { status: 'pending_reauth' });
-					showToast(`Reauthorization email sent to ${row.customer}`, 'info');
+					showToast( __( 'Reauthorization status updated — outbound reauth email is not yet implemented', 'purecart' ), 'info' );
 					closeDialog();
 				})),
 			},
@@ -340,14 +359,19 @@ export function useSubscriptionActions() {
 						}),
 					} as ActionItem,
 					{
-						label: 'Reinstate (undo pending cancel)', icon: CheckCircle,
+						label: __( 'Reinstate (undo pending cancel)', 'purecart' ), icon: CheckCircle,
 						onClick: () => openDialog({
-							danger: false, icon: CheckCircle, title: 'Reinstate Subscription?',
-							body: <span>Cancel the scheduled cancellation for {row.customer}? Billing resumes normally.</span>,
-							confirmLabel: 'Reinstate',
-							onConfirm: () => {
-								updateRow(row.id, { status: 'active', cancellationDate: null, cancellationReasonId: null });
-								showToast(`Subscription reinstated for ${row.customer}`, 'success');
+							danger: false, icon: CheckCircle, title: __( 'Reinstate Subscription?', 'purecart' ),
+							body: <span>{ sprintf( __( 'Cancel the scheduled cancellation for %s? Billing resumes normally.', 'purecart' ), row.customer ) }</span>,
+							confirmLabel: __( 'Reinstate', 'purecart' ),
+							onConfirm: async () => {
+								try {
+									await dispatch( resumeSubscriptionThunk( row.id ) ).unwrap();
+									showToast( sprintf( __( 'Subscription reinstated for %s', 'purecart' ), row.customer ), 'success' );
+								} catch ( err: unknown ) {
+									const msg = err && typeof err === 'object' && 'message' in err ? ( err as { message: string } ).message : __( 'Failed to reinstate subscription', 'purecart' );
+									showToast( msg, 'error' );
+								}
 								closeDialog();
 							},
 						}),
@@ -361,17 +385,9 @@ export function useSubscriptionActions() {
 				onClick: () => setCancelRow(row),
 			},
 			{
-				label: 'Refund Last Payment', icon: RotateCcw, danger: true,
-				disabled: row.status === 'cancelled' || row.status === 'trialing',
-				onClick: () => openDialog({
-					danger: true, icon: RotateCcw, title: 'Refund Last Payment?',
-					body: <span>Issue a full refund of <strong>{row.amount}</strong> to <strong>{row.customer}</strong>? The refund will be credited to their original payment method within 5–10 business days.</span>,
-					confirmLabel: 'Issue Refund',
-					onConfirm: () => {
-						showToast(`Refund of ${row.amount} issued to ${row.customer}`, 'warning');
-						closeDialog();
-					},
-				}),
+				label: __( 'Refund Last Payment', 'purecart' ), icon: RotateCcw, danger: true,
+				disabled: true,
+				onClick: () => showToast( __( 'Refund processing is not available yet — no refund endpoint exists', 'purecart' ), 'info' ),
 			},
 			...(row.paymentType === 'split'
 				? [{
@@ -428,45 +444,93 @@ export function useSubscriptionActions() {
 			switch (entity.type) {
 				case 'software':
 					return [
-						{ label: 'View License', icon: Key, dividerBefore: true, onClick: () => showToast(`License ${entity.licenseKey} — detail view coming with the Licensing module`, 'info') },
 						{
-							label: 'Revoke License', icon: XCircle, danger: true, onClick: () => openDialog({
-								danger: true, icon: XCircle, title: 'Revoke License?',
-								body: <span>Revoke the license key for {row.customer}? Their software will stop receiving updates and activation checks will fail.</span>,
-								confirmLabel: 'Revoke License',
-								onConfirm: () => { showToast(`License revoked for ${row.customer}`, 'error'); closeDialog(); },
-							})
+							label: __( 'View License', 'purecart' ), icon: Key, dividerBefore: true,
+							onClick: () => {
+								const licId = parseInt( entity.licenseId, 10 );
+								if ( licId ) {
+									navigate( licenseDetailPath( licId ) );
+								} else {
+									showToast( __( 'No linked license found', 'purecart' ), 'info' );
+								}
+							},
 						},
 						{
-							label: 'Reset Activations', icon: RotateCcw, onClick: () => openDialog({
-								danger: false, icon: RotateCcw, title: 'Reset Activations?',
-								body: <span>Reset all domain activations for {row.customer}'s license? They'll need to reactivate on each site.</span>,
-								confirmLabel: 'Reset Activations',
-								onConfirm: () => {
-									updateRow(row.id, { linkedEntity: { ...entity, domainsUsed: 0, domainCount: `0/${entity.domainLimit}` } });
-									showToast(`Activations reset for ${row.customer}`, 'success');
+							label: __( 'Revoke License', 'purecart' ), icon: XCircle, danger: true,
+							onClick: () => openDialog({
+								danger: true, icon: XCircle, title: __( 'Revoke License?', 'purecart' ),
+								body: <span>{ sprintf( __( 'Revoke the license key for %s? Their software will stop receiving updates and activation checks will fail.', 'purecart' ), row.customer ) }</span>,
+								confirmLabel: __( 'Revoke License', 'purecart' ),
+								onConfirm: async () => {
+									const licId = parseInt( entity.licenseId, 10 );
+									if ( ! licId ) { showToast( __( 'No linked license found', 'purecart' ), 'error' ); closeDialog(); return; }
+									try {
+										await dispatch( revokeLicenseThunk( licId ) ).unwrap();
+										showToast( sprintf( __( 'License revoked for %s', 'purecart' ), row.customer ), 'error' );
+									} catch ( err: unknown ) {
+										const msg = err && typeof err === 'object' && 'message' in err ? ( err as { message: string } ).message : __( 'Failed to revoke license', 'purecart' );
+										showToast( msg, 'error' );
+									}
 									closeDialog();
 								},
-							})
+							}),
+						},
+						{
+							label: __( 'Reset Activations', 'purecart' ), icon: RotateCcw,
+							onClick: () => openDialog({
+								danger: false, icon: RotateCcw, title: __( 'Reset Activations?', 'purecart' ),
+								body: <span>{ sprintf( __( "Reset all domain activations for %s's license? They'll need to reactivate on each site.", 'purecart' ), row.customer ) }</span>,
+								confirmLabel: __( 'Reset Activations', 'purecart' ),
+								onConfirm: async () => {
+									const licId = parseInt( entity.licenseId, 10 );
+									if ( ! licId ) { showToast( __( 'No linked license found', 'purecart' ), 'error' ); closeDialog(); return; }
+									try {
+										await dispatch( resetLicenseActivationsThunk( licId ) ).unwrap();
+										showToast( sprintf( __( 'Activations reset for %s', 'purecart' ), row.customer ), 'success' );
+									} catch ( err: unknown ) {
+										const msg = err && typeof err === 'object' && 'message' in err ? ( err as { message: string } ).message : __( 'Failed to reset activations', 'purecart' );
+										showToast( msg, 'error' );
+									}
+									closeDialog();
+								},
+							}),
 						},
 					] as ActionItem[];
 				case 'saas':
 					return [
-						{ label: 'View Account', icon: Cloud, dividerBefore: true, onClick: () => showToast(`Account ${entity.saasAccountName} — detail view coming with the SaaS module`, 'info') },
-						{ label: 'Adjust Seat Count', icon: Users, onClick: () => showToast('Seat adjustment — needs a small number-input modal, not built yet', 'info') },
 						{
-							label: 'Suspend Account', icon: PauseCircle, onClick: () => openDialog({
-								danger: false, icon: PauseCircle, title: 'Suspend SaaS Account?',
-								body: <span>Suspend {entity.saasAccountName}'s account access?</span>,
-								confirmLabel: 'Suspend Account',
-								onConfirm: () => { showToast(`Account suspended for ${row.customer}`, 'warning'); closeDialog(); },
-							})
+							label: __( 'View Account', 'purecart' ), icon: Cloud, dividerBefore: true,
+							onClick: () => navigate( '/saas-accounts' ),
+						},
+						{
+							label: __( 'Adjust Seat Count', 'purecart' ), icon: Users,
+							onClick: () => showToast( __( 'Seat adjustment is not available yet — no endpoint exists for this action', 'purecart' ), 'info' ),
+						},
+						{
+							label: __( 'Suspend Account', 'purecart' ), icon: PauseCircle, danger: true,
+							onClick: () => openDialog({
+								danger: true, icon: PauseCircle, title: __( 'Suspend SaaS Account?', 'purecart' ),
+								body: <span>{ sprintf( __( "Suspend %s's account access?", 'purecart' ), entity.saasAccountName ) }</span>,
+								confirmLabel: __( 'Suspend Account', 'purecart' ),
+								onConfirm: async () => {
+									const accId = parseInt( entity.saasAccountId, 10 );
+									if ( ! accId ) { showToast( __( 'No linked SaaS account found', 'purecart' ), 'error' ); closeDialog(); return; }
+									try {
+										await dispatch( suspendSaasAccountThunk( accId ) ).unwrap();
+										showToast( sprintf( __( 'Account suspended for %s', 'purecart' ), row.customer ), 'warning' );
+									} catch ( err: unknown ) {
+										const msg = err && typeof err === 'object' && 'message' in err ? ( err as { message: string } ).message : __( 'Failed to suspend account', 'purecart' );
+										showToast( msg, 'error' );
+									}
+									closeDialog();
+								},
+							}),
 						},
 					] as ActionItem[];
 				case 'membership':
 					return [
-						{ label: 'Change Tier', icon: ArrowUpRight, dividerBefore: true, onClick: () => showToast('Tier picker — reuse the Change Plan pattern once tiers are product-configurable', 'info') },
-						{ label: 'View Restricted Content', icon: Lock, onClick: () => showToast('Content restriction detail — no dedicated page yet', 'info') },
+						{ label: __( 'Change Tier', 'purecart' ), icon: ArrowUpRight, dividerBefore: true, onClick: () => showToast( __( 'Tier switching is not available yet — requires product-level tier configuration', 'purecart' ), 'info' ) },
+						{ label: __( 'View Restricted Content', 'purecart' ), icon: Lock, onClick: () => showToast( __( 'Content restriction overview is not available yet', 'purecart' ), 'info' ) },
 						{
 							label: 'Extend Grace Period (+7 days)', icon: Calendar, onClick: () => openDialog({
 								danger: false, icon: Calendar, title: 'Extend Grace Period?',
@@ -494,12 +558,12 @@ export function useSubscriptionActions() {
 								},
 							})
 						},
-						{ label: 'Send New Content Email', icon: Mail, onClick: () => showToast(`Content notification sent to ${row.customer}`, 'success') },
-						{ label: 'Manage Drip Schedule', icon: Clock, onClick: () => showToast('Drip schedule editor — deferred, no spec exists yet for this UI', 'info') },
+						{ label: __( 'Send New Content Email', 'purecart' ), icon: Mail, onClick: () => showToast( __( 'Content notification emails are not available yet — no email endpoint exists', 'purecart' ), 'info' ) },
+						{ label: __( 'Manage Drip Schedule', 'purecart' ), icon: Clock, onClick: () => showToast( __( 'Drip schedule editor is not available yet', 'purecart' ), 'info' ) },
 					] as ActionItem[];
 				case 'course':
 					return [
-						{ label: 'View Course Progress', icon: BarChart2, dividerBefore: true, onClick: () => showToast('Progress chart — deferred, needs real LMS API data', 'info') },
+						{ label: __( 'View Course Progress', 'purecart' ), icon: BarChart2, dividerBefore: true, onClick: () => showToast( __( 'Course progress tracking is not available yet — requires LMS API integration', 'purecart' ), 'info' ) },
 						{
 							label: 'Extend Course Access (+30 days)', icon: Calendar, onClick: () => openDialog({
 								danger: false, icon: Calendar, title: 'Extend Course Access?',
@@ -512,7 +576,7 @@ export function useSubscriptionActions() {
 								},
 							})
 						},
-						{ label: 'Resend Enrollment Email', icon: Mail, onClick: () => showToast(`Enrollment email resent to ${row.customer}`, 'success') },
+						{ label: __( 'Resend Enrollment Email', 'purecart' ), icon: Mail, onClick: () => showToast( __( 'Enrollment emails are not available yet — no email endpoint exists', 'purecart' ), 'info' ) },
 					] as ActionItem[];
 				case 'service':
 					return [
@@ -529,8 +593,8 @@ export function useSubscriptionActions() {
 								},
 							})
 						},
-						{ label: 'Send Invoice', icon: FileText, onClick: () => showToast(`Invoice sent to ${row.customer}`, 'success') },
-						{ label: 'Add Deliverable Note', icon: Edit, onClick: () => showToast('Note editor — deferred, needs a small textarea modal', 'info') },
+						{ label: __( 'Send Invoice', 'purecart' ), icon: FileText, onClick: () => showToast( __( 'Invoice sending is not available yet — no invoice endpoint exists', 'purecart' ), 'info' ) },
+						{ label: __( 'Add Deliverable Note', 'purecart' ), icon: Edit, onClick: () => showToast( __( 'Deliverable note editor is not available yet', 'purecart' ), 'info' ) },
 					] as ActionItem[];
 			}
 		})();
@@ -650,8 +714,8 @@ export function useSubscriptionActions() {
 					row={historyRow}
 					payments={historyPayments}
 					onClose={() => setHistoryRow(null)}
-					onSendReceipt={(p) => showToast(`Receipt for ${p.date} sent to ${historyRow.customer}`, 'success')}
-					onExport={() => showToast('Payment history exported', 'success')}
+					onSendReceipt={() => showToast( __( 'Receipt emails are not available yet — no email endpoint exists', 'purecart' ), 'info' )}
+					onExport={() => showToast( __( 'Payment history export is not available yet', 'purecart' ), 'info' )}
 				/>
 			)}
 			<ConfirmDialog

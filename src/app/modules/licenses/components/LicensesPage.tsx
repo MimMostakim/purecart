@@ -17,6 +17,7 @@ import { __, sprintf, _n } from '@wordpress/i18n';
 import { M3 } from '@/theme';
 import { useAppDispatch, useAppSelector } from '@/app/store/hooks';
 import { getOrCreateResource } from '@/shared/suspense';
+import { getAdminConfig } from '@/shared/wp';
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 import { Toast, type ToastProps } from '@/shared/ui/Toast';
 import {
@@ -357,16 +358,22 @@ export function LicensesPage() {
 				totalCount={ total }
 				onPageChange={ ( p ) => dispatch( setPage( p ) ) }
 				onViewDetail={ viewDetail }
-				onViewCustomer={ () => showToast( __( 'Customer detail page — coming soon', 'purecart' ), 'info' ) }
+				onViewCustomer={ ( license ) => {
+					const adminUrl = getAdminConfig().adminUrl;
+					if ( adminUrl && license.userId ) {
+						window.open( `${ adminUrl }user-edit.php?user_id=${ license.userId }`, '_blank' );
+					} else {
+						showToast( __( 'No linked WordPress user for this license', 'purecart' ), 'info' );
+					}
+				} }
 				onCopyKey={ handleCopyKey }
 				onDuplicate={ handleDuplicate }
 				onExtendExpiry={ handleExtendExpiry }
 				onResetActivations={ handleResetActivations }
-				onSendReminder={ ( license ) =>
+				onSendReminder={ () =>
 					showToast(
-						/* translators: %s: customer email address */
-						sprintf( __( 'Reminder sent to %s', 'purecart' ), license.customerEmail || __( 'customer', 'purecart' ) ),
-						'success'
+						__( 'Reminder emails are not available yet — no email endpoint exists for this action', 'purecart' ),
+						'info'
 					)
 				}
 				onSuspend={ handleSuspend }

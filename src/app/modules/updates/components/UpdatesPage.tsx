@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, BarChart2, RefreshCw } from 'lucide-react';
+import { Plus, BarChart2, RefreshCw, Trash2 } from 'lucide-react';
+import { __ } from '@wordpress/i18n';
 import { useAppDispatch, useAppSelector } from '@/app/store/hooks';
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 import { getOrCreateResource } from '@/shared/suspense';
 import {
 	loadVersions,
@@ -51,6 +53,7 @@ export function UpdatesPage() {
 
 	const [ selectedChangelog, setSelectedChangelog ] = useState<ProductVersion | null>( null );
 	const [ rollbackTarget, setRollbackTarget ] = useState<ProductVersion | null>( null );
+	const [ deleteTargetId, setDeleteTargetId ] = useState<number | null>( null );
 	const [ storeProducts, setStoreProducts ] = useState<Array<{ id: number; name: string }>>( [] );
 
 	// Suspends only for the true first load this page session ever sees (a
@@ -110,9 +113,7 @@ export function UpdatesPage() {
 	};
 
 	const handleDelete = ( versionId: number ) => {
-		if ( window.confirm( 'Are you sure you want to permanently delete this software package and its file?' ) ) {
-			dispatch( removeVersion( versionId ) );
-		}
+		setDeleteTargetId( versionId );
 	};
 
 	const handleConfirmRollback = async ( reason: string ) => {
@@ -279,6 +280,22 @@ export function UpdatesPage() {
 					toVersion="previous safe build"
 				/>
 			) }
+
+			<ConfirmDialog
+				open={ deleteTargetId !== null }
+				danger
+				icon={ Trash2 }
+				title={ __( 'Delete Package?', 'purecart' ) }
+				body={ __( 'Permanently delete this software package and its file? This cannot be undone.', 'purecart' ) }
+				confirmLabel={ __( 'Delete Package', 'purecart' ) }
+				onConfirm={ () => {
+					if ( deleteTargetId !== null ) {
+						dispatch( removeVersion( deleteTargetId ) );
+					}
+					setDeleteTargetId( null );
+				} }
+				onCancel={ () => setDeleteTargetId( null ) }
+			/>
 		</div>
 	);
 }

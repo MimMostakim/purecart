@@ -16,6 +16,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CreditCard, PauseCircle, XCircle } from 'lucide-react';
+import { __ , sprintf } from '@wordpress/i18n';
 import { useAppDispatch, useAppSelector } from '@/app/store/hooks';
 import { useSuspenseThunk } from '@/shared/suspense';
 import {
@@ -31,6 +32,9 @@ import {
 	setSelectedSubscriptionId,
 	setPage,
 	setPerPage,
+	pauseSubscriptionThunk,
+	cancelSubscriptionThunk,
+	sendCardUpdateThunk,
 } from '../store/subscriptions.slice';
 import {
 	selectSubscriptionItems,
@@ -64,7 +68,7 @@ export function SubscriptionsPage() {
 	const perPage = useAppSelector(selectSubscriptionPerPage);
 
 	const [selected, setSelected] = useState<string[]>([]);
-	const { rowActions, openBulkDiscount, sendCardUpdateEmail, showToast, openDialog, updateRow, modals } =
+	const { rowActions, openBulkDiscount, sendCardUpdateEmail, showToast, openDialog, closeDialog, modals } =
 		useSubscriptionActions();
 
 	const toggleSelect = (id: string) =>
@@ -189,35 +193,44 @@ export function SubscriptionsPage() {
 				cardUpdateEligibleCount={cardUpdateEligibleIds.length}
 				onClear={() => setSelected([])}
 				onPauseAll={() => openDialog({
-					danger: false, icon: PauseCircle, title: `Pause ${selected.length} Subscriptions?`,
-					body: `Pause billing for all ${selected.length} selected subscriptions? Customers will keep access until their current period ends.`,
-					confirmLabel: `Pause ${selected.length}`,
-					onConfirm: () => {
-						selected.forEach((id) => {
-							const r = tableData.find((x) => x.id === id);
-							if (r?.status === 'active') updateRow(id, { status: 'paused', nextPayment: null });
-						});
-						showToast(`${selected.length} subscriptions paused`, 'warning');
-						setSelected([]);
+					danger: false, icon: PauseCircle,
+					title: sprintf( __( 'Pause %d Subscriptions?', 'purecart' ), selected.length ),
+					body: sprintf( __( 'Pause billing for all %d selected subscriptions? Customers will keep access until their current period ends.', 'purecart' ), selected.length ),
+					confirmLabel: sprintf( __( 'Pause %d', 'purecart' ), selected.length ),
+					onConfirm: async () => {
+						const activeIds = selected.filter( ( id ) => {
+							const r = tableData.find( ( x ) => x.id === id );
+							return r?.status === 'active';
+						} );
+						await Promise.allSettled( activeIds.map( ( id ) => dispatch( pauseSubscriptionThunk( { id } ) ) ) );
+						showToast( sprintf( __( '%d subscriptions paused', 'purecart' ), activeIds.length ), 'warning' );
+						setSelected( [] );
+						closeDialog();
 					},
 				})}
-				onSendReceipts={() => showToast(`Receipt sent to ${selected.length} customers`, 'success')}
+				onSendReceipts={() => showToast( __( 'Receipt emails are not available yet — no email endpoint exists for this action', 'purecart' ), 'info' )}
 				onSendCardUpdateEmail={() => openDialog({
-					danger: false, icon: CreditCard, title: 'Send Card Update Emails?',
-					body: `Send a card update link to ${cardUpdateEligibleIds.length} customer(s) with an expiring card on a past-due subscription?`,
-					confirmLabel: 'Send Links',
-					onConfirm: () => { showToast(`Card update emails sent to ${cardUpdateEligibleIds.length} customers`, 'success'); },
+					danger: false, icon: CreditCard,
+					title: __( 'Send Card Update Emails?', 'purecart' ),
+					body: sprintf( __( 'Send a card update link to %d customer(s) with an expiring card on a past-due subscription?', 'purecart' ), cardUpdateEligibleIds.length ),
+					confirmLabel: __( 'Send Links', 'purecart' ),
+					onConfirm: async () => {
+						await Promise.allSettled( cardUpdateEligibleIds.map( ( id ) => dispatch( sendCardUpdateThunk( id ) ) ) );
+						showToast( sprintf( __( 'Card update emails sent to %d customers', 'purecart' ), cardUpdateEligibleIds.length ), 'success' );
+						closeDialog();
+					},
 				})}
 				onApplyDiscountToAll={() => openBulkDiscount(tableData.filter((r) => selected.includes(r.id)))}
 				onCancelSelected={() => openDialog({
-					danger: true, icon: XCircle, title: `Cancel ${selected.length} Subscriptions?`,
-					body: `Immediately cancel billing for all ${selected.length} selected subscriptions. Access ends immediately. This cannot be reversed.`,
-					confirmLabel: `Cancel ${selected.length} Subscriptions`,
-					onConfirm: () => {
-						const today = new Date().toISOString().slice(0, 10);
-						selected.forEach((id) => updateRow(id, { status: 'cancelled', nextPayment: null, cancellationDate: today }));
-						showToast(`${selected.length} subscriptions cancelled`, 'error');
-						setSelected([]);
+					danger: true, icon: XCircle,
+					title: sprintf( __( 'Cancel %d Subscriptions?', 'purecart' ), selected.length ),
+					body: sprintf( __( 'Immediately cancel billing for all %d selected subscriptions. Access ends immediately. This cannot be reversed.', 'purecart' ), selected.length ),
+					confirmLabel: sprintf( __( 'Cancel %d Subscriptions', 'purecart' ), selected.length ),
+					onConfirm: async () => {
+						await Promise.allSettled( selected.map( ( id ) => dispatch( cancelSubscriptionThunk( { id, immediately: true } ) ) ) );
+						showToast( sprintf( __( '%d subscriptions cancelled', 'purecart' ), selected.length ), 'error' );
+						setSelected( [] );
+						closeDialog();
 					},
 				})}
 			/>

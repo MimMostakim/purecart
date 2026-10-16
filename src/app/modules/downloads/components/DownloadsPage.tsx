@@ -229,7 +229,14 @@ export function DownloadsPage() {
 				totalPages={ totalPages }
 				totalCount={ total }
 				onPageChange={ ( p ) => dispatch( setPage( p ) ) }
-				onViewCustomer={ () => showToast( __( 'Customer detail page — coming soon', 'purecart' ), 'info' ) }
+				onViewCustomer={ ( entry ) => {
+					const adminUrl = window.purecartAdmin?.adminUrl;
+					if ( adminUrl && entry.customerEmail ) {
+						window.open( `${ adminUrl }users.php?s=${ encodeURIComponent( entry.customerEmail ) }`, '_blank' );
+					} else {
+						showToast( __( 'No customer email available for this entry', 'purecart' ), 'info' );
+					}
+				} }
 				onRegenerateToken={ handleRegenerateToken }
 				onRevokeToken={ handleRevokeToken }
 			/>
