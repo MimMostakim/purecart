@@ -3,6 +3,7 @@ import { Provider } from 'react-redux';
 import { store } from '../store/store';
 import { AppRouter } from '../router';
 import { ErrorBoundary } from '../ErrorBoundary';
+import { EnabledModulesProvider } from '@/modules/settings';
 
 interface AppProvidersProps {
 	children: ReactNode;
@@ -19,7 +20,9 @@ export function AppProviders({ children }: AppProvidersProps) {
 	return (
 		<ErrorBoundary>
 			<Provider store={store}>
-				<AppRouter>{children}</AppRouter>
+				<EnabledModulesProvider>
+					<AppRouter>{children}</AppRouter>
+				</EnabledModulesProvider>
 			</Provider>
 		</ErrorBoundary>
 	);

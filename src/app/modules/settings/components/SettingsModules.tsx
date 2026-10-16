@@ -11,7 +11,13 @@ import { useState } from 'react';
 import { M3 } from '@/theme';
 import { Card } from '@/shared/ui/Card';
 import { Toggle } from '@/shared/ui/Toggle';
+import { Toast, type ToastProps } from '@/shared/ui/Toast';
 import { INITIAL_MODULES } from './moduleRegistry';
+import { useEnabledModules } from '../EnabledModulesContext';
+
+function nameToSlug( name: string ): string {
+	return name.toLowerCase().replace( /\s+/g, '-' );
+}
 
 /**
  * Renders the Modules settings tab.
@@ -21,14 +27,31 @@ import { INITIAL_MODULES } from './moduleRegistry';
  * @return {JSX.Element} The Modules settings tab.
  */
 export function SettingsModules() {
-	const [ modules, setModules ] = useState( INITIAL_MODULES );
+	const { slugs: enabledSlugs, toggle } = useEnabledModules();
+	const [ toast, setToast ] = useState< ToastProps >( { message: '', type: 'success', visible: false } );
 
-	const toggleModule = ( name: string ) => {
-		setModules( ( prev ) =>
-			prev.map( ( m ) =>
-				m.name === name ? { ...m, enabled: ! m.enabled } : m
-			)
-		);
+	const showToast = ( msg: string, type: ToastProps[ 'type' ] = 'success' ) => {
+		setToast( { message: msg, type, visible: true } );
+		setTimeout( () => setToast( ( t ) => ( { ...t, visible: false } ) ), 3000 );
+	};
+
+	const modules = INITIAL_MODULES.map( ( m ) => ( {
+		...m,
+		enabled: enabledSlugs.includes( nameToSlug( m.name ) ),
+	} ) );
+
+	const toggleModule = async ( name: string ) => {
+		const slug = nameToSlug( name );
+		const wasEnabled = enabledSlugs.includes( slug );
+		const ok = await toggle( slug );
+		if ( ok ) {
+			showToast(
+				wasEnabled ? `${ name } disabled` : `${ name } enabled`,
+				'success'
+			);
+		} else {
+			showToast( 'Failed to save module settings', 'error' );
+		}
 	};
 
 	return (
@@ -119,6 +142,7 @@ export function SettingsModules() {
 					</div>
 				</Card>
 			) ) }
+			<Toast { ...toast } />
 		</div>
 	);
 }

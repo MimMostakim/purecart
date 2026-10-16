@@ -9,10 +9,15 @@
  * @file
  * @since 1.0.0
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Mail, RefreshCw } from 'lucide-react';
 import { M3 } from '@/theme';
-import { fetchEmailPreview } from '@/modules/updates';
+import {
+	fetchEmailPreview,
+	fetchUpdateSettings,
+	saveUpdateSettings,
+	regenerateUpdateSecret,
+} from '@/modules/updates';
 import { FilledButton } from '@/shared/ui/FilledButton';
 import { OutlinedButton } from '@/shared/ui/OutlinedButton';
 import { TonalButton } from '@/shared/ui/TonalButton';
@@ -48,6 +53,7 @@ export function SettingsUpdates() {
 	const [ tokenTtl, setTokenTtl ] = useState( 15 );
 	const [ emailNotifications, setEmailNotifications ] = useState( true );
 	const [ isDirty, setIsDirty ] = useState( false );
+	const [ isSaving, setIsSaving ] = useState( false );
 
 	const [ confirmRegenerate, setConfirmRegenerate ] = useState( false );
 	const [ previewHtml, setPreviewHtml ] = useState< string | null >( null );
@@ -57,6 +63,19 @@ export function SettingsUpdates() {
 		type: 'success',
 		visible: false,
 	} );
+
+	useEffect( () => {
+		fetchUpdateSettings()
+			.then( ( s ) => {
+				setDefaultChannel( s.defaultChannel );
+				setRequireLicense( s.requireLicense );
+				setAllowRollback( s.allowRollback );
+				setTokenTtl( s.tokenTtl );
+				setEmailNotifications( s.emailNotifications );
+			} )
+			.catch( () => showToast( 'Failed to load update settings', 'error' ) );
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [] );
 
 	const showToast = (
 		msg: string,
@@ -82,12 +101,17 @@ export function SettingsUpdates() {
 		}
 	};
 
-	const handleRegenerateSecret = () => {
+	const handleRegenerateSecret = async () => {
 		setConfirmRegenerate( false );
-		showToast(
-			'HMAC secret regenerated - all previous download links are now invalid',
-			'success'
-		);
+		try {
+			await regenerateUpdateSecret();
+			showToast(
+				'HMAC secret regenerated — all previous download links are now invalid',
+				'success'
+			);
+		} catch {
+			showToast( 'Failed to regenerate HMAC secret', 'error' );
+		}
 	};
 
 	return (
@@ -249,13 +273,27 @@ export function SettingsUpdates() {
 
 			<div className="fixed bottom-6 right-6">
 				<FilledButton
-					disabled={ ! isDirty }
-					onClick={ () => {
-						showToast( 'Settings saved', 'success' );
-						setIsDirty( false );
+					disabled={ ! isDirty || isSaving }
+					onClick={ async () => {
+						setIsSaving( true );
+						try {
+							await saveUpdateSettings( {
+								defaultChannel: defaultChannel as 'stable' | 'beta' | 'nightly',
+								requireLicense,
+								allowRollback,
+								tokenTtl,
+								emailNotifications,
+							} );
+							showToast( 'Update settings saved', 'success' );
+							setIsDirty( false );
+						} catch {
+							showToast( 'Failed to save update settings', 'error' );
+						} finally {
+							setIsSaving( false );
+						}
 					} }
 				>
-					Save Changes
+					{ isSaving ? 'Saving…' : 'Save Changes' }
 				</FilledButton>
 			</div>
 			<Toast

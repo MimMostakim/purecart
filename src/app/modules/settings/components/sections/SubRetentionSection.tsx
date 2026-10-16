@@ -4,8 +4,7 @@
  * @file
  * @since 1.0.0
  */
-import { M3 } from '@/theme';
-import { SettingsToggleField } from '../shared';
+import { SettingsToggleField, SettingsField } from '../shared';
 import type { SettingsSectionProps } from '../settingsSectionTypes';
 
 /**
@@ -28,16 +27,44 @@ export function SubRetentionSection( {
 				checked={ settings.retentionFlowEnabled }
 				onChange={ ( v ) => update( 'retentionFlowEnabled', v ) }
 			/>
-			<div
-				className="text-xs pt-2"
-				style={ {
-					color: M3.onSurfaceVariant,
-					fontFamily: 'Roboto, sans-serif',
-				} }
-			>
-				Per-reason offer configuration is set on each product; this is
-				the module-wide toggle.
-			</div>
+			<SettingsField
+				label="Retention discount (%)"
+				type="number"
+				value={ settings.retentionDiscountPercent }
+				onChange={ ( v ) =>
+					update( 'retentionDiscountPercent', parseInt( v, 10 ) || 0 )
+				}
+				disabled={ ! settings.retentionFlowEnabled }
+				helpText="Discount offered to customers attempting to cancel"
+			/>
+			<SettingsField
+				label="Discount cycles"
+				type="number"
+				value={ settings.retentionDiscountCycles }
+				onChange={ ( v ) =>
+					update( 'retentionDiscountCycles', parseInt( v, 10 ) || 0 )
+				}
+				disabled={ ! settings.retentionFlowEnabled }
+				helpText="Number of billing cycles the retention discount applies"
+			/>
+			<SettingsField
+				label="Pause duration"
+				suffix="days"
+				type="number"
+				value={ settings.retentionPauseDays }
+				onChange={ ( v ) =>
+					update( 'retentionPauseDays', parseInt( v, 10 ) || 0 )
+				}
+				disabled={ ! settings.retentionFlowEnabled }
+				helpText="How long a subscription can be paused via the retention flow"
+			/>
+			<SettingsField
+				label="Support contact URL"
+				value={ settings.retentionContactUrl }
+				onChange={ ( v ) => update( 'retentionContactUrl', v ) }
+				disabled={ ! settings.retentionFlowEnabled }
+				helpText="Shown in the retention flow as a 'Talk to us' option"
+			/>
 		</>
 	);
 }

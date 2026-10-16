@@ -159,3 +159,64 @@ export async function fetchUpdateAnalytics(): Promise<UpdateAnalyticsData> {
 export async function fetchEmailPreview(): Promise<{ html: string }> {
 	return purecartFetch<{ html: string }>('/updates/email-preview');
 }
+
+// ─── Settings API ──────────────────────────────────────────────────────
+
+export interface UpdateSettings {
+	defaultChannel: 'stable' | 'beta' | 'nightly';
+	requireLicense: boolean;
+	allowRollback: boolean;
+	tokenTtl: number;
+	emailNotifications: boolean;
+}
+
+interface RawUpdateSettings {
+	default_channel: string;
+	require_license: boolean;
+	allow_rollback: boolean;
+	token_ttl: number;
+	email_notifications: boolean;
+}
+
+/**
+ * GET /purecart/v1/updates/settings
+ *
+ * @since 1.0.0
+ */
+export async function fetchUpdateSettings(): Promise< UpdateSettings > {
+	const raw = await purecartFetch< RawUpdateSettings >( '/updates/settings' );
+	return {
+		defaultChannel: raw.default_channel as UpdateSettings[ 'defaultChannel' ],
+		requireLicense: raw.require_license,
+		allowRollback: raw.allow_rollback,
+		tokenTtl: raw.token_ttl,
+		emailNotifications: raw.email_notifications,
+	};
+}
+
+/**
+ * POST /purecart/v1/updates/settings
+ *
+ * @since 1.0.0
+ */
+export async function saveUpdateSettings( settings: UpdateSettings ): Promise< void > {
+	await purecartFetch( '/updates/settings', {
+		method: 'POST',
+		data: {
+			default_channel: settings.defaultChannel,
+			require_license: settings.requireLicense,
+			allow_rollback: settings.allowRollback,
+			token_ttl: settings.tokenTtl,
+			email_notifications: settings.emailNotifications,
+		},
+	} );
+}
+
+/**
+ * POST /purecart/v1/updates/regenerate-secret
+ *
+ * @since 1.0.0
+ */
+export async function regenerateUpdateSecret(): Promise< void > {
+	await purecartFetch( '/updates/regenerate-secret', { method: 'POST' } );
+}

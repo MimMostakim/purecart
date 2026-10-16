@@ -287,6 +287,10 @@ export interface SubscriptionSettings {
 	allowCustomerUpgrade: boolean;
 	// Retention
 	retentionFlowEnabled: boolean;
+	retentionDiscountPercent: number;
+	retentionDiscountCycles: number;
+	retentionPauseDays: number;
+	retentionContactUrl: string;
 	// Customer Portal
 	allowSelfPause: boolean;
 	allowSelfCancel: boolean;

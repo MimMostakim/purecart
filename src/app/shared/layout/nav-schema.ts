@@ -51,6 +51,36 @@ export const NAV_SCHEMA: Array< {
 	{ id: 'settings',       icon: SettingsIcon,    label: 'Settings' },
 ];
 
+/**
+ * Maps a module slug (stored in the enabled_modules option) to
+ * the nav-schema Page id it controls.
+ */
+export const MODULE_SLUG_TO_PAGE: Record< string, Page > = {
+	'secure-downloads':  'downloads',
+	'license-manager':   'licenses',
+	'update-manager':    'updates',
+	'subscriptions':     'subscriptions',
+	'saas-provisioning': 'saas-accounts',
+	'affiliate-program': 'affiliates',
+	'abandoned-cart':    'abandoned-cart',
+	'analytics':         'analytics',
+	'security-suite':    'security',
+};
+
+const ALWAYS_VISIBLE: Set< Page > = new Set( [ 'overview', 'settings' ] );
+
+export function getVisibleNavItems( enabledSlugs: string[] ) {
+	const enabledPages = new Set< Page >(
+		enabledSlugs
+			.map( ( s ) => MODULE_SLUG_TO_PAGE[ s ] )
+			.filter( ( p ): p is Page => !! p )
+	);
+
+	return NAV_SCHEMA.filter(
+		( item ) => ALWAYS_VISIBLE.has( item.id ) || enabledPages.has( item.id )
+	);
+}
+
 // ─── Page titles ───────────────────────────────────────────────────────────────
 export const PAGE_TITLES: Record< Page, string > = {
 	'overview':               'Overview',

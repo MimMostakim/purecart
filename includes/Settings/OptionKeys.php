@@ -302,6 +302,149 @@ class OptionKeys {
 	 */
 	public const SUB_CARD_EXPIRY_WARNING_DAYS = 'purecart_sub_card_expiry_warning_days';
 
+	// Subscriptions — Auto-renewal & cart
+
+	/** @since 1.0.0 @var bool */
+	public const SUB_AUTO_RENEWAL = 'purecart_sub_auto_renewal';
+
+	/** @since 1.0.0 @var bool */
+	public const SUB_ALLOW_MIXED_CART = 'purecart_sub_allow_mixed_cart';
+
+	// Subscriptions — Dunning toggle
+
+	/** @since 1.0.0 @var bool */
+	public const SUB_SEND_DUNNING_EMAILS = 'purecart_sub_send_dunning_emails';
+
+	// Subscriptions — Upgrade/Downgrade
+
+	/** @since 1.0.0 @var bool */
+	public const SUB_ALLOW_CUSTOMER_UPGRADE = 'purecart_sub_allow_customer_upgrade';
+
+	// Subscriptions — Retention toggle
+
+	/** @since 1.0.0 @var bool */
+	public const SUB_RETENTION_FLOW_ENABLED = 'purecart_sub_retention_flow_enabled';
+
+	// Subscriptions — Customer portal
+
+	/** @since 1.0.0 @var bool */
+	public const SUB_ALLOW_SELF_PAUSE = 'purecart_sub_allow_self_pause';
+
+	/** @since 1.0.0 @var bool */
+	public const SUB_ALLOW_SELF_CANCEL = 'purecart_sub_allow_self_cancel';
+
+	/** @since 1.0.0 @var bool */
+	public const SUB_ALLOW_EARLY_RENEWAL = 'purecart_sub_allow_early_renewal';
+
+	/** @since 1.0.0 @var bool */
+	public const SUB_ALLOW_SKIP_RENEWAL = 'purecart_sub_allow_skip_renewal';
+
+	// Subscriptions — Subscribe & Save
+
+	/** @since 1.0.0 @var bool */
+	public const SUB_SUBSCRIBE_SAVE_ENABLED = 'purecart_sub_subscribe_save_enabled';
+
+	/** @since 1.0.0 @var string */
+	public const SUB_DISCOUNT_TYPE = 'purecart_sub_discount_type';
+
+	/** @since 1.0.0 @var int */
+	public const SUB_DISCOUNT_VALUE = 'purecart_sub_discount_value';
+
+	/** @since 1.0.0 @var string */
+	public const SUB_SAVINGS_BADGE_LABEL = 'purecart_sub_savings_badge_label';
+
+	// Subscriptions — Advanced
+
+	/** @since 1.0.0 @var string */
+	public const SUB_STAGING_DOMAINS = 'purecart_sub_staging_domains';
+
+	/** @since 1.0.0 @var string */
+	public const SUB_GATEWAY_META_KEYS = 'purecart_sub_gateway_meta_keys';
+
+	/** @since 1.0.0 @var bool */
+	public const SUB_DEBUG_MODE = 'purecart_sub_debug_mode';
+
+	// Updates module
+
+	/** @since 1.0.0 @var string */
+	public const UPDATE_DEFAULT_CHANNEL = 'purecart_update_default_channel';
+
+	/** @since 1.0.0 @var bool */
+	public const UPDATE_REQUIRE_LICENSE = 'purecart_update_require_license';
+
+	/** @since 1.0.0 @var bool */
+	public const UPDATE_ALLOW_ROLLBACK = 'purecart_update_allow_rollback';
+
+	/** @since 1.0.0 @var int */
+	public const UPDATE_TOKEN_TTL = 'purecart_update_token_ttl';
+
+	/** @since 1.0.0 @var bool */
+	public const UPDATE_EMAIL_NOTIFICATIONS = 'purecart_update_email_notifications';
+
+	// Module enable/disable
+
+	/** @since 1.0.0 @var string JSON-encoded array of enabled module slugs. */
+	public const ENABLED_MODULES = 'purecart_enabled_modules';
+
+	// Subscriptions — Membership delivery
+
+	/** @since 1.0.0 @var int */
+	public const SUB_MEMBERSHIP_GRACE_DAYS = 'purecart_sub_membership_grace_days';
+
+	/** @since 1.0.0 @var string */
+	public const SUB_CONTENT_RESTRICTION_PLUGIN = 'purecart_sub_content_restriction_plugin';
+
+	/** @since 1.0.0 @var string */
+	public const SUB_AVAILABLE_TIERS = 'purecart_sub_available_tiers';
+
+	/** @since 1.0.0 @var bool */
+	public const SUB_ALLOW_SELF_TIER_UPGRADE = 'purecart_sub_allow_self_tier_upgrade';
+
+	// Subscriptions — Digital Downloads delivery
+
+	/** @since 1.0.0 @var int */
+	public const SUB_DOWNLOAD_LIMIT_PER_CYCLE = 'purecart_sub_download_limit_per_cycle';
+
+	/** @since 1.0.0 @var bool */
+	public const SUB_RESET_DOWNLOADS_ON_RENEWAL = 'purecart_sub_reset_downloads_on_renewal';
+
+	/** @since 1.0.0 @var bool */
+	public const SUB_ENABLE_DRIP_CONTENT = 'purecart_sub_enable_drip_content';
+
+	/** @since 1.0.0 @var int */
+	public const SUB_DRIP_INTERVAL_DAYS = 'purecart_sub_drip_interval_days';
+
+	// Subscriptions — Courses / LMS delivery
+
+	/** @since 1.0.0 @var string */
+	public const SUB_LMS_INTEGRATION = 'purecart_sub_lms_integration';
+
+	/** @since 1.0.0 @var string */
+	public const SUB_LMS_API_KEY = 'purecart_sub_lms_api_key';
+
+	/** @since 1.0.0 @var int */
+	public const SUB_DEFAULT_COURSE_ACCESS_MONTHS = 'purecart_sub_default_course_access_months';
+
+	/** @since 1.0.0 @var bool */
+	public const SUB_ENROLL_ON_TRIAL_START = 'purecart_sub_enroll_on_trial_start';
+
+	/** @since 1.0.0 @var bool */
+	public const SUB_REVOKE_ENROLLMENT_ON_CANCEL = 'purecart_sub_revoke_enrollment_on_cancel';
+
+	// Subscriptions — Service / Retainer delivery
+
+	/** @since 1.0.0 @var string */
+	public const SUB_DEFAULT_INVOICING_MODE = 'purecart_sub_default_invoicing_mode';
+
+	/** @since 1.0.0 @var int */
+	public const SUB_INVOICE_DUE_DAYS = 'purecart_sub_invoice_due_days';
+
+	/** @since 1.0.0 @var bool */
+	public const SUB_ENABLE_DELIVERABLE_TRACKING = 'purecart_sub_enable_deliverable_tracking';
+
+	/** @since 1.0.0 @var string */
+	public const SUB_DEFAULT_DELIVERABLE_TEMPLATE = 'purecart_sub_default_deliverable_template';
+
 	// Subscriptions — Webhooks
 
 	/**

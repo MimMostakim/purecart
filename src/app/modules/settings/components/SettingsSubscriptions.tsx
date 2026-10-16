@@ -33,7 +33,15 @@ import {
 	SubCoursesSection,
 	SubServiceSection,
 } from './sections';
-import { selectSubscriptionItems, loadSubscriptions, defaultSubscriptionSettings } from '@/modules/subscriptions';
+import {
+	selectSubscriptionItems,
+	loadSubscriptions,
+	defaultSubscriptionSettings,
+	fetchSubscriptionSettings,
+	saveSubscriptionSettings,
+	createRevenueGoal,
+	deleteRevenueGoal,
+} from '@/modules/subscriptions';
 import type { SubscriptionSettings, SubscriptionDeliveryType, RevenueGoal } from '@/modules/subscriptions';
 
 /**
@@ -61,9 +69,15 @@ export function SettingsSubscriptions() {
 	const storeItems = useAppSelector( selectSubscriptionItems );
 	const hasType = ( type: SubscriptionDeliveryType ) => storeItems.some( ( r ) => r.deliveryType === type );
 
+	const [ isSaving, setIsSaving ] = useState( false );
+
 	useEffect( () => {
+		fetchSubscriptionSettings()
+			.then( setSettings )
+			.catch( () => showToast( 'Failed to load subscription settings', 'error' ) );
 		fetchRevenueGoals().then( setGoals );
 		dispatch( loadSubscriptions() );
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [ dispatch ] );
 
 	const showToast = ( msg: string, type: ToastProps[ 'type' ] = 'success' ) => {
@@ -76,13 +90,23 @@ export function SettingsSubscriptions() {
 		setIsDirty( true );
 	};
 
-	const addGoal = ( goal: Omit< RevenueGoal, 'id' | 'current' | 'status' > ) => {
-		setGoals( ( g ) => [ ...g, { ...goal, id: `goal-${ Date.now() }`, current: 0, status: 'on_track' } ] );
-		setIsDirty( true );
+	const addGoal = async ( goal: Omit< RevenueGoal, 'id' | 'current' | 'status' > ) => {
+		try {
+			const saved = await createRevenueGoal( goal );
+			setGoals( ( g ) => [ saved, ...g ] );
+			showToast( 'Revenue goal created', 'success' );
+		} catch {
+			showToast( 'Failed to create revenue goal', 'error' );
+		}
 	};
-	const deleteGoal = ( id: string ) => {
-		setGoals( ( g ) => g.filter( ( goal ) => goal.id !== id ) );
-		setIsDirty( true );
+	const handleDeleteGoal = async ( id: string ) => {
+		try {
+			await deleteRevenueGoal( id );
+			setGoals( ( g ) => g.filter( ( goal ) => goal.id !== id ) );
+			showToast( 'Revenue goal deleted', 'success' );
+		} catch {
+			showToast( 'Failed to delete revenue goal', 'error' );
+		}
 	};
 
 	return (
@@ -115,7 +139,7 @@ export function SettingsSubscriptions() {
 				<SubAdvancedSection settings={ settings } update={ update } />
 			</CollapsibleSection>
 			<CollapsibleSection title="Revenue Goals">
-				<SubRevenueGoalsSection goals={ goals } onAdd={ addGoal } onDelete={ deleteGoal } />
+				<SubRevenueGoalsSection goals={ goals } onAdd={ addGoal } onDelete={ handleDeleteGoal } />
 			</CollapsibleSection>
 
 			{ hasType( 'membership' ) && (
@@ -141,13 +165,21 @@ export function SettingsSubscriptions() {
 
 			<div className="fixed bottom-6 right-6">
 				<FilledButton
-					disabled={ ! isDirty }
-					onClick={ () => {
-						showToast( 'Settings saved', 'success' );
-						setIsDirty( false );
+					disabled={ ! isDirty || isSaving }
+					onClick={ async () => {
+						setIsSaving( true );
+						try {
+							await saveSubscriptionSettings( settings );
+							showToast( 'Subscription settings saved', 'success' );
+							setIsDirty( false );
+						} catch {
+							showToast( 'Failed to save subscription settings', 'error' );
+						} finally {
+							setIsSaving( false );
+						}
 					} }
 				>
-					Save Changes
+					{ isSaving ? 'Saving…' : 'Save Changes' }
 				</FilledButton>
 			</div>
 			<Toast message={ toast.message } type={ toast.type } visible={ toast.visible } />

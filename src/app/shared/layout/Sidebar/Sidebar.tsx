@@ -1,7 +1,8 @@
 import { Package, ChevronLeft, ChevronRight } from 'lucide-react';
 import { __ } from '@wordpress/i18n';
 import { M3 } from '@/theme';
-import { NAV_SCHEMA } from '../nav-schema';
+import { getVisibleNavItems } from '../nav-schema';
+import { useEnabledModules } from '@/modules/settings';
 import type { Page } from '@/shared/types/page';
 
 /**
@@ -30,6 +31,9 @@ export function Sidebar( {
 	collapsed: boolean;
 	onToggle: () => void;
 } ) {
+	const { slugs: enabledSlugs } = useEnabledModules();
+	const visibleItems = getVisibleNavItems( enabledSlugs );
+
 	return (
 		<aside
 			className="flex flex-col h-full transition-all duration-200 flex-shrink-0"
@@ -87,7 +91,7 @@ export function Sidebar( {
 
 			{ /* ── Nav ── */ }
 			<nav className="flex-1 px-3 overflow-y-auto pb-4">
-				{ NAV_SCHEMA.map( ( item ) => {
+				{ visibleItems.map( ( item ) => {
 					const active = activePage === item.id || (
 						// Treat subscription-analytics as subscriptions being active
 						item.id === 'subscriptions' && activePage === 'subscription-analytics'

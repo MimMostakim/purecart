@@ -11,3 +11,4 @@ export { SettingsDownloads } from './components/SettingsDownloads';
 export { SettingsSubscriptions } from './components/SettingsSubscriptions';
 export { SettingsUpdates } from './components/SettingsUpdates';
 export { SettingsSaas } from './components/SettingsSaas';
+export { EnabledModulesProvider, useEnabledModules } from './EnabledModulesContext';

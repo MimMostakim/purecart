@@ -16,6 +16,8 @@ use PureCart\Updates\UpdateInfo;
 use PureCart\Updates\UpdatePackageManager;
 use PureCart\Updates\UpdateReport;
 use PureCart\Updates\UpdateServer;
+use PureCart\Settings\OptionKeys;
+use PureCart\Settings\Settings;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -279,6 +281,33 @@ class Updates extends PureCartApi {
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'admin_email_preview' ),
+				'permission_callback' => array( $this, 'permission_admin' ),
+			)
+		);
+
+		register_rest_route(
+			PURECART_API_NAMESPACE,
+			'/updates/settings',
+			array(
+				array(
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_settings' ),
+					'permission_callback' => array( $this, 'permission_admin' ),
+				),
+				array(
+					'methods'             => \WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'save_settings' ),
+					'permission_callback' => array( $this, 'permission_admin' ),
+				),
+			)
+		);
+
+		register_rest_route(
+			PURECART_API_NAMESPACE,
+			'/updates/regenerate-secret',
+			array(
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'regenerate_secret' ),
 				'permission_callback' => array( $this, 'permission_admin' ),
 			)
 		);
@@ -888,6 +917,71 @@ class Updates extends PureCartApi {
 		$response->header( 'Cache-Control', 'no-store, private' );
 
 		return $response;
+	}
+
+	/**
+	 * GET /updates/settings
+	 *
+	 * @since 1.0.0
+	 * @return \WP_REST_Response
+	 */
+	public function get_settings(): \WP_REST_Response {
+		return rest_ensure_response( array(
+			'default_channel'       => (string) Settings::get( OptionKeys::UPDATE_DEFAULT_CHANNEL, 'stable' ),
+			'require_license'       => (bool) Settings::get( OptionKeys::UPDATE_REQUIRE_LICENSE, true ),
+			'allow_rollback'        => (bool) Settings::get( OptionKeys::UPDATE_ALLOW_ROLLBACK, true ),
+			'token_ttl'             => (int) Settings::get( OptionKeys::UPDATE_TOKEN_TTL, 15 ),
+			'email_notifications'   => (bool) Settings::get( OptionKeys::UPDATE_EMAIL_NOTIFICATIONS, true ),
+		) );
+	}
+
+	/**
+	 * POST /updates/settings
+	 *
+	 * @since 1.0.0
+	 * @param \WP_REST_Request $request REST request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function save_settings( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		if ( null !== $request->get_param( 'default_channel' ) ) {
+			$channel = sanitize_text_field( (string) $request->get_param( 'default_channel' ) );
+			if ( ! in_array( $channel, array( 'stable', 'beta', 'nightly' ), true ) ) {
+				return new \WP_Error( 'invalid_channel', __( 'Invalid update channel.', 'purecart' ), array( 'status' => 400 ) );
+			}
+			Settings::set( OptionKeys::UPDATE_DEFAULT_CHANNEL, $channel );
+		}
+
+		$bool_keys = array(
+			'require_license'     => OptionKeys::UPDATE_REQUIRE_LICENSE,
+			'allow_rollback'      => OptionKeys::UPDATE_ALLOW_ROLLBACK,
+			'email_notifications' => OptionKeys::UPDATE_EMAIL_NOTIFICATIONS,
+		);
+
+		foreach ( $bool_keys as $param => $key ) {
+			if ( null !== $request->get_param( $param ) ) {
+				Settings::set( $key, (bool) $request->get_param( $param ) );
+			}
+		}
+
+		if ( null !== $request->get_param( 'token_ttl' ) ) {
+			Settings::set( OptionKeys::UPDATE_TOKEN_TTL, max( 1, (int) $request->get_param( 'token_ttl' ) ) );
+		}
+
+		return $this->get_settings();
+	}
+
+	/**
+	 * POST /updates/regenerate-secret
+	 *
+	 * @since 1.0.0
+	 * @return \WP_REST_Response
+	 */
+	public function regenerate_secret(): \WP_REST_Response {
+		$this->delivery->regenerate_secret();
+
+		return rest_ensure_response( array(
+			'success' => true,
+		) );
 	}
 }
 

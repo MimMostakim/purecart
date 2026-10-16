@@ -20,6 +20,8 @@ use PureCart\Subscriptions\Payment\PlanUpgrade;
 use PureCart\Subscriptions\Webhooks\WebhookHandler;
 use PureCart\Subscriptions\ChurnScorer;
 use PureCart\Subscriptions\Billing\BillingClock;
+use PureCart\Settings\OptionKeys;
+use PureCart\Settings\Settings;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -411,6 +413,60 @@ class Subscriptions extends PureCartApi {
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'get_report_export' ),
+				'permission_callback' => array( $this, 'permission_admin' ),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			$base . '/settings',
+			array(
+				array(
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_settings' ),
+					'permission_callback' => array( $this, 'permission_admin' ),
+				),
+				array(
+					'methods'             => \WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'save_settings' ),
+					'permission_callback' => array( $this, 'permission_admin' ),
+				),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			$base . '/revenue-goals',
+			array(
+				array(
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'list_revenue_goals' ),
+					'permission_callback' => array( $this, 'permission_admin' ),
+				),
+				array(
+					'methods'             => \WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'create_revenue_goal' ),
+					'permission_callback' => array( $this, 'permission_admin' ),
+				),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			$base . '/revenue-goals/(?P<goal_id>\d+)',
+			array(
+				'methods'             => \WP_REST_Server::DELETABLE,
+				'callback'            => array( $this, 'delete_revenue_goal' ),
+				'permission_callback' => array( $this, 'permission_admin' ),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			$base . '/roles',
+			array(
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'list_wp_roles' ),
 				'permission_callback' => array( $this, 'permission_admin' ),
 			)
 		);
@@ -1180,5 +1236,318 @@ class Subscriptions extends PureCartApi {
 		}
 
 		return $payload;
+	}
+
+	/**
+	 * GET /subscriptions/revenue-goals
+	 *
+	 * @since 1.0.0
+	 * @return \WP_REST_Response
+	 */
+	public function list_revenue_goals(): \WP_REST_Response {
+		global $wpdb;
+		$table = $wpdb->prefix . 'purecart_revenue_goals';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows  = $wpdb->get_results( "SELECT * FROM {$table} ORDER BY created_at DESC", ARRAY_A );
+
+		$goals = array_map( static function ( array $row ): array {
+			return array(
+				'id'      => (string) $row['id'],
+				'label'   => $row['name'],
+				'type'    => 'total_revenue',
+				'target'  => (float) $row['target_amount'],
+				'current' => (float) $row['current_amount'],
+				'period'  => $row['start_date'] . ' – ' . $row['end_date'],
+				'status'  => 'active' === $row['status'] ? 'on_track' : ( 'achieved' === $row['status'] ? 'exceeded' : 'at_risk' ),
+			);
+		}, $rows ?: array() );
+
+		return rest_ensure_response( $goals );
+	}
+
+	/**
+	 * POST /subscriptions/revenue-goals
+	 *
+	 * @since 1.0.0
+	 * @param \WP_REST_Request $request REST request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function create_revenue_goal( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$label  = sanitize_text_field( (string) $request->get_param( 'label' ) );
+		$target = (float) $request->get_param( 'target' );
+		$period = sanitize_text_field( (string) $request->get_param( 'period' ) );
+
+		if ( '' === $label || $target <= 0 ) {
+			return new \WP_Error( 'invalid_goal', __( 'Label and a positive target are required.', 'purecart' ), array( 'status' => 400 ) );
+		}
+
+		$dates      = explode( ' – ', $period );
+		$start_date = isset( $dates[0] ) ? sanitize_text_field( $dates[0] ) : gmdate( 'Y-m-d' );
+		$end_date   = isset( $dates[1] ) ? sanitize_text_field( $dates[1] ) : gmdate( 'Y-m-d', strtotime( '+3 months' ) );
+
+		global $wpdb;
+		$table = $wpdb->prefix . 'purecart_revenue_goals';
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->insert(
+			$table,
+			array(
+				'name'          => $label,
+				'target_amount' => $target,
+				'start_date'    => $start_date,
+				'end_date'      => $end_date,
+			),
+			array( '%s', '%f', '%s', '%s' )
+		);
+
+		$id = (int) $wpdb->insert_id;
+
+		return rest_ensure_response( array(
+			'id'      => (string) $id,
+			'label'   => $label,
+			'type'    => 'total_revenue',
+			'target'  => $target,
+			'current' => 0,
+			'period'  => $start_date . ' – ' . $end_date,
+			'status'  => 'on_track',
+		) );
+	}
+
+	/**
+	 * DELETE /subscriptions/revenue-goals/<goal_id>
+	 *
+	 * @since 1.0.0
+	 * @param \WP_REST_Request $request REST request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function delete_revenue_goal( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$id = (int) $request->get_param( 'goal_id' );
+
+		global $wpdb;
+		$table = $wpdb->prefix . 'purecart_revenue_goals';
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$deleted = $wpdb->delete( $table, array( 'id' => $id ), array( '%d' ) );
+
+		if ( ! $deleted ) {
+			return new \WP_Error( 'not_found', __( 'Revenue goal not found.', 'purecart' ), array( 'status' => 404 ) );
+		}
+
+		return rest_ensure_response( array( 'deleted' => true ) );
+	}
+
+	/**
+	 * GET /subscriptions/roles — lists all editable WordPress roles.
+	 *
+	 * @since 1.0.0
+	 * @return \WP_REST_Response
+	 */
+	public function list_wp_roles(): \WP_REST_Response {
+		$roles = wp_roles()->get_names();
+		$list  = array( array( 'label' => __( 'None', 'purecart' ), 'value' => '' ) );
+
+		foreach ( $roles as $slug => $name ) {
+			$list[] = array(
+				'label' => translate_user_role( $name ),
+				'value' => $slug,
+			);
+		}
+
+		return rest_ensure_response( $list );
+	}
+
+	/**
+	 * GET /subscriptions/settings
+	 *
+	 * @since 1.0.0
+	 * @return \WP_REST_Response
+	 */
+	public function get_settings(): \WP_REST_Response {
+		$retry_raw = (string) Settings::get( OptionKeys::SUB_RETRY_INTERVALS, '1,3,5' );
+		$retry     = array_map( 'intval', array_filter( explode( ',', $retry_raw ), 'strlen' ) );
+
+		$reminder_raw = (string) Settings::get( OptionKeys::SUB_RENEWAL_REMINDER_DAYS, '7,3,1' );
+		$reminder     = array_map( 'intval', array_filter( explode( ',', $reminder_raw ), 'strlen' ) );
+
+		return rest_ensure_response( array(
+			'enable_subscriptions'         => (bool) Settings::get( OptionKeys::SUB_ENABLED, true ),
+			'enable_auto_renewal'          => (bool) Settings::get( OptionKeys::SUB_AUTO_RENEWAL, true ),
+			'allow_mixed_cart'             => (bool) Settings::get( OptionKeys::SUB_ALLOW_MIXED_CART, true ),
+			'one_trial_per_customer'       => (bool) Settings::get( OptionKeys::SUB_ONE_TRIAL_PER_CUSTOMER, true ),
+			'allow_multiple_subscriptions' => (bool) Settings::get( OptionKeys::SUB_ALLOW_MULTIPLE_SUBSCRIPTIONS, true ),
+			'avg_lifetime_months'          => (int) Settings::get( OptionKeys::SUB_AVG_LIFETIME_MONTHS, 24 ),
+			'max_retry_attempts'           => (int) Settings::get( OptionKeys::SUB_RETRY_ATTEMPTS, 3 ),
+			'retry_interval_days'          => $retry,
+			'active_grace_days'            => (int) Settings::get( OptionKeys::SUB_ACTIVE_GRACE_DAYS, 7 ),
+			'suspended_grace_days'         => (int) Settings::get( OptionKeys::SUB_SUSPENDED_GRACE_DAYS, 7 ),
+			'send_dunning_emails'          => (bool) Settings::get( OptionKeys::SUB_SEND_DUNNING_EMAILS, true ),
+			'renewal_reminder_days'        => $reminder,
+			'trial_reminder_days'          => (int) Settings::get( OptionKeys::SUB_TRIAL_REMINDER_DAYS, 3 ),
+			'card_expiry_warning_days'     => (int) Settings::get( OptionKeys::SUB_CARD_EXPIRY_WARNING_DAYS, 30 ),
+			'enable_renewal_sync'          => (bool) Settings::get( OptionKeys::SUB_RENEWAL_SYNC, false ),
+			'renewal_sync_date'            => (int) Settings::get( OptionKeys::SUB_RENEWAL_SYNC_DATE, 1 ),
+			'default_proration_mode'       => (string) Settings::get( OptionKeys::SUB_PRORATION_MODE, 'apply_at_renewal' ),
+			'allow_customer_upgrade'       => (bool) Settings::get( OptionKeys::SUB_ALLOW_CUSTOMER_UPGRADE, true ),
+			'retention_flow_enabled'       => (bool) Settings::get( OptionKeys::SUB_RETENTION_FLOW_ENABLED, true ),
+			'allow_self_pause'             => (bool) Settings::get( OptionKeys::SUB_ALLOW_SELF_PAUSE, true ),
+			'allow_self_cancel'            => (bool) Settings::get( OptionKeys::SUB_ALLOW_SELF_CANCEL, true ),
+			'allow_early_renewal'          => (bool) Settings::get( OptionKeys::SUB_ALLOW_EARLY_RENEWAL, true ),
+			'allow_skip_renewal'           => (bool) Settings::get( OptionKeys::SUB_ALLOW_SKIP_RENEWAL, true ),
+			'skip_limit_per_year'          => (int) Settings::get( OptionKeys::SUB_SKIP_LIMIT, 1 ),
+			'resubscribe_window_days'      => (int) Settings::get( OptionKeys::SUB_RESUBSCRIBE_WINDOW_DAYS, 30 ),
+			'trial_role'                   => Settings::get( OptionKeys::SUB_TRIAL_ROLE, null ) ?: null,
+			'active_role'                  => Settings::get( OptionKeys::SUB_ACTIVE_ROLE, null ) ?: null,
+			'cancelled_role'               => Settings::get( OptionKeys::SUB_CANCELLED_ROLE, null ) ?: null,
+			'subscribe_save_enabled'       => (bool) Settings::get( OptionKeys::SUB_SUBSCRIBE_SAVE_ENABLED, true ),
+			'discount_type'                => (string) Settings::get( OptionKeys::SUB_DISCOUNT_TYPE, 'percentage' ),
+			'discount_value'               => (int) Settings::get( OptionKeys::SUB_DISCOUNT_VALUE, 15 ),
+			'savings_badge_label'          => (string) Settings::get( OptionKeys::SUB_SAVINGS_BADGE_LABEL, 'Save 15% with a subscription' ),
+			'staging_domains'              => (string) Settings::get( OptionKeys::SUB_STAGING_DOMAINS, '' ),
+			'gateway_meta_keys'            => (string) Settings::get( OptionKeys::SUB_GATEWAY_META_KEYS, '' ),
+			'cancel_saas_immediately'      => (bool) Settings::get( OptionKeys::SUB_CANCEL_SAAS_IMMEDIATELY, false ),
+			'debug_mode'                   => (bool) Settings::get( OptionKeys::SUB_DEBUG_MODE, false ),
+			'retention_discount_percent'   => (int) Settings::get( OptionKeys::SUB_RETENTION_DISCOUNT_PERCENT, 20 ),
+			'retention_discount_cycles'    => (int) Settings::get( OptionKeys::SUB_RETENTION_DISCOUNT_CYCLES, 3 ),
+			'retention_pause_days'         => (int) Settings::get( OptionKeys::SUB_RETENTION_PAUSE_DAYS, 30 ),
+			'retention_contact_url'        => (string) Settings::get( OptionKeys::SUB_RETENTION_CONTACT_URL, '' ),
+			// Membership delivery
+			'membership_grace_days'        => (int) Settings::get( OptionKeys::SUB_MEMBERSHIP_GRACE_DAYS, 3 ),
+			'content_restriction_plugin'   => (string) Settings::get( OptionKeys::SUB_CONTENT_RESTRICTION_PLUGIN, 'none' ),
+			'available_tiers'              => (string) Settings::get( OptionKeys::SUB_AVAILABLE_TIERS, 'Gold, Silver, Bronze' ),
+			'allow_self_tier_upgrade'      => (bool) Settings::get( OptionKeys::SUB_ALLOW_SELF_TIER_UPGRADE, true ),
+			// Digital Downloads delivery
+			'download_limit_per_cycle'     => (int) Settings::get( OptionKeys::SUB_DOWNLOAD_LIMIT_PER_CYCLE, 10 ),
+			'reset_downloads_on_renewal'   => (bool) Settings::get( OptionKeys::SUB_RESET_DOWNLOADS_ON_RENEWAL, true ),
+			'enable_drip_content'          => (bool) Settings::get( OptionKeys::SUB_ENABLE_DRIP_CONTENT, false ),
+			'drip_interval_days'           => (int) Settings::get( OptionKeys::SUB_DRIP_INTERVAL_DAYS, 7 ),
+			// Courses / LMS delivery
+			'lms_integration'              => (string) Settings::get( OptionKeys::SUB_LMS_INTEGRATION, 'none' ),
+			'lms_api_key'                  => (string) Settings::get( OptionKeys::SUB_LMS_API_KEY, '' ),
+			'default_course_access_months' => (int) Settings::get( OptionKeys::SUB_DEFAULT_COURSE_ACCESS_MONTHS, 12 ),
+			'enroll_on_trial_start'        => (bool) Settings::get( OptionKeys::SUB_ENROLL_ON_TRIAL_START, true ),
+			'revoke_enrollment_on_cancel'  => (bool) Settings::get( OptionKeys::SUB_REVOKE_ENROLLMENT_ON_CANCEL, true ),
+			// Service / Retainer delivery
+			'default_invoicing_mode'       => (string) Settings::get( OptionKeys::SUB_DEFAULT_INVOICING_MODE, 'manual' ),
+			'invoice_due_days'             => (int) Settings::get( OptionKeys::SUB_INVOICE_DUE_DAYS, 7 ),
+			'enable_deliverable_tracking'  => (bool) Settings::get( OptionKeys::SUB_ENABLE_DELIVERABLE_TRACKING, true ),
+			'default_deliverable_template' => (string) Settings::get( OptionKeys::SUB_DEFAULT_DELIVERABLE_TEMPLATE, '' ),
+		) );
+	}
+
+	/**
+	 * POST /subscriptions/settings
+	 *
+	 * @since 1.0.0
+	 * @param \WP_REST_Request $request REST request.
+	 * @return \WP_REST_Response
+	 */
+	public function save_settings( \WP_REST_Request $request ): \WP_REST_Response {
+		$bool_keys = array(
+			'enable_subscriptions'         => OptionKeys::SUB_ENABLED,
+			'enable_auto_renewal'          => OptionKeys::SUB_AUTO_RENEWAL,
+			'allow_mixed_cart'             => OptionKeys::SUB_ALLOW_MIXED_CART,
+			'one_trial_per_customer'       => OptionKeys::SUB_ONE_TRIAL_PER_CUSTOMER,
+			'allow_multiple_subscriptions' => OptionKeys::SUB_ALLOW_MULTIPLE_SUBSCRIPTIONS,
+			'send_dunning_emails'          => OptionKeys::SUB_SEND_DUNNING_EMAILS,
+			'enable_renewal_sync'          => OptionKeys::SUB_RENEWAL_SYNC,
+			'allow_customer_upgrade'       => OptionKeys::SUB_ALLOW_CUSTOMER_UPGRADE,
+			'retention_flow_enabled'       => OptionKeys::SUB_RETENTION_FLOW_ENABLED,
+			'allow_self_pause'             => OptionKeys::SUB_ALLOW_SELF_PAUSE,
+			'allow_self_cancel'            => OptionKeys::SUB_ALLOW_SELF_CANCEL,
+			'allow_early_renewal'          => OptionKeys::SUB_ALLOW_EARLY_RENEWAL,
+			'allow_skip_renewal'           => OptionKeys::SUB_ALLOW_SKIP_RENEWAL,
+			'subscribe_save_enabled'       => OptionKeys::SUB_SUBSCRIBE_SAVE_ENABLED,
+			'cancel_saas_immediately'      => OptionKeys::SUB_CANCEL_SAAS_IMMEDIATELY,
+			'debug_mode'                   => OptionKeys::SUB_DEBUG_MODE,
+			'allow_self_tier_upgrade'      => OptionKeys::SUB_ALLOW_SELF_TIER_UPGRADE,
+			'reset_downloads_on_renewal'   => OptionKeys::SUB_RESET_DOWNLOADS_ON_RENEWAL,
+			'enable_drip_content'          => OptionKeys::SUB_ENABLE_DRIP_CONTENT,
+			'enroll_on_trial_start'        => OptionKeys::SUB_ENROLL_ON_TRIAL_START,
+			'revoke_enrollment_on_cancel'  => OptionKeys::SUB_REVOKE_ENROLLMENT_ON_CANCEL,
+			'enable_deliverable_tracking'  => OptionKeys::SUB_ENABLE_DELIVERABLE_TRACKING,
+		);
+
+		foreach ( $bool_keys as $param => $key ) {
+			if ( null !== $request->get_param( $param ) ) {
+				Settings::set( $key, (bool) $request->get_param( $param ) );
+			}
+		}
+
+		$int_keys = array(
+			'avg_lifetime_months'        => OptionKeys::SUB_AVG_LIFETIME_MONTHS,
+			'max_retry_attempts'         => OptionKeys::SUB_RETRY_ATTEMPTS,
+			'active_grace_days'          => OptionKeys::SUB_ACTIVE_GRACE_DAYS,
+			'suspended_grace_days'       => OptionKeys::SUB_SUSPENDED_GRACE_DAYS,
+			'trial_reminder_days'        => OptionKeys::SUB_TRIAL_REMINDER_DAYS,
+			'card_expiry_warning_days'   => OptionKeys::SUB_CARD_EXPIRY_WARNING_DAYS,
+			'renewal_sync_date'          => OptionKeys::SUB_RENEWAL_SYNC_DATE,
+			'skip_limit_per_year'        => OptionKeys::SUB_SKIP_LIMIT,
+			'resubscribe_window_days'    => OptionKeys::SUB_RESUBSCRIBE_WINDOW_DAYS,
+			'discount_value'             => OptionKeys::SUB_DISCOUNT_VALUE,
+			'retention_discount_percent'    => OptionKeys::SUB_RETENTION_DISCOUNT_PERCENT,
+			'retention_discount_cycles'    => OptionKeys::SUB_RETENTION_DISCOUNT_CYCLES,
+			'retention_pause_days'         => OptionKeys::SUB_RETENTION_PAUSE_DAYS,
+			'membership_grace_days'        => OptionKeys::SUB_MEMBERSHIP_GRACE_DAYS,
+			'download_limit_per_cycle'     => OptionKeys::SUB_DOWNLOAD_LIMIT_PER_CYCLE,
+			'drip_interval_days'           => OptionKeys::SUB_DRIP_INTERVAL_DAYS,
+			'default_course_access_months' => OptionKeys::SUB_DEFAULT_COURSE_ACCESS_MONTHS,
+			'invoice_due_days'             => OptionKeys::SUB_INVOICE_DUE_DAYS,
+		);
+
+		foreach ( $int_keys as $param => $key ) {
+			if ( null !== $request->get_param( $param ) ) {
+				Settings::set( $key, (int) $request->get_param( $param ) );
+			}
+		}
+
+		$string_keys = array(
+			'default_proration_mode' => OptionKeys::SUB_PRORATION_MODE,
+			'discount_type'          => OptionKeys::SUB_DISCOUNT_TYPE,
+			'savings_badge_label'    => OptionKeys::SUB_SAVINGS_BADGE_LABEL,
+			'staging_domains'        => OptionKeys::SUB_STAGING_DOMAINS,
+			'gateway_meta_keys'      => OptionKeys::SUB_GATEWAY_META_KEYS,
+			'retention_contact_url'        => OptionKeys::SUB_RETENTION_CONTACT_URL,
+			'content_restriction_plugin'   => OptionKeys::SUB_CONTENT_RESTRICTION_PLUGIN,
+			'available_tiers'              => OptionKeys::SUB_AVAILABLE_TIERS,
+			'lms_integration'              => OptionKeys::SUB_LMS_INTEGRATION,
+			'lms_api_key'                  => OptionKeys::SUB_LMS_API_KEY,
+			'default_invoicing_mode'       => OptionKeys::SUB_DEFAULT_INVOICING_MODE,
+			'default_deliverable_template' => OptionKeys::SUB_DEFAULT_DELIVERABLE_TEMPLATE,
+		);
+
+		foreach ( $string_keys as $param => $key ) {
+			if ( null !== $request->get_param( $param ) ) {
+				Settings::set( $key, sanitize_text_field( (string) $request->get_param( $param ) ) );
+			}
+		}
+
+		$role_keys = array(
+			'trial_role'     => OptionKeys::SUB_TRIAL_ROLE,
+			'active_role'    => OptionKeys::SUB_ACTIVE_ROLE,
+			'cancelled_role' => OptionKeys::SUB_CANCELLED_ROLE,
+		);
+
+		foreach ( $role_keys as $param => $key ) {
+			if ( $request->has_param( $param ) ) {
+				$val = $request->get_param( $param );
+				Settings::set( $key, is_string( $val ) ? sanitize_text_field( $val ) : '' );
+			}
+		}
+
+		if ( null !== $request->get_param( 'retry_interval_days' ) ) {
+			$raw = $request->get_param( 'retry_interval_days' );
+			if ( is_array( $raw ) ) {
+				Settings::set( OptionKeys::SUB_RETRY_INTERVALS, implode( ',', array_map( 'intval', $raw ) ) );
+			}
+		}
+
+		if ( null !== $request->get_param( 'renewal_reminder_days' ) ) {
+			$raw = $request->get_param( 'renewal_reminder_days' );
+			if ( is_array( $raw ) ) {
+				Settings::set( OptionKeys::SUB_RENEWAL_REMINDER_DAYS, implode( ',', array_map( 'intval', $raw ) ) );
+			}
+		}
+
+		return $this->get_settings();
 	}
 }
